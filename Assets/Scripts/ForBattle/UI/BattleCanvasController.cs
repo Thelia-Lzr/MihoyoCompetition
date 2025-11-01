@@ -27,6 +27,9 @@ namespace Assets.Scripts.ForBattle.UI
 
         private System.Action<BattleActionType> onActionSelected;
 
+        [Header("Skill List")]
+        public SkillListController skillListController; // optional, assign in Inspector
+
         public enum BattleActionType : int
         {
             Attack = 0,
@@ -56,6 +59,15 @@ namespace Assets.Scripts.ForBattle.UI
             else if (Choice == BattleActionType.Skill)
             {
                 skillChosen.SetActive(true);
+            }
+
+            // Show or hide skill list panel via controller
+            if (skillListController != null)
+            {
+                if (Choice == BattleActionType.Skill)
+                    skillListController.Show();
+                else
+                    skillListController.Hide();
             }
         }
         void Start()
@@ -94,6 +106,9 @@ namespace Assets.Scripts.ForBattle.UI
             if (actionMenuPanel != null)
                 actionMenuPanel.SetActive(false);
             onActionSelected = null;
+
+            if (skillListController != null)
+                skillListController.Hide();
         }
 
         public void UpdatePrompt(string prompt)

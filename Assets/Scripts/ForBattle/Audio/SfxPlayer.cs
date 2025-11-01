@@ -27,9 +27,20 @@ namespace Assets.Scripts.ForBattle.Audio
         [Tooltip("预创建的 AudioSource 数量，用于播放短音效（会根据需要自动扩展）")]
         public int initialPoolSize = 4;
 
+        [Header("Loop settings")]
+        [Tooltip("循环音效的最短播放时长（秒），防止频繁开始/停止导致断裂")]
+        public float minLoopPlayTime = 0.5f;
+
         // internal
         private Dictionary<string, SoundEntry> soundMap = new Dictionary<string, SoundEntry>();
         private List<AudioSource> pool = new List<AudioSource>();
+
+        // looped sources by key
+        private Dictionary<string, AudioSource> loopSources = new Dictionary<string, AudioSource>();
+        // record when loop started
+        private Dictionary<string, float> loopStartTimes = new Dictionary<string, float>();
+        // pending stop coroutines
+        private Dictionary<string, Coroutine> pendingStopCoroutines = new Dictionary<string, Coroutine>();
 
         void Awake()
         {
@@ -73,7 +84,7 @@ namespace Assets.Scripts.ForBattle.Audio
         {
             foreach (var s in pool)
             {
-                if (!s.isPlaying) return s;
+                if (!s.isPlaying && !s.loop) return s; // prefer non-looping free sources
             }
             // none free, create new one
             var src = gameObject.AddComponent<AudioSource>();
@@ -133,6 +144,103 @@ namespace Assets.Scripts.ForBattle.Audio
         }
 
         /// <summary>
+        /// Play a looping sound by key. If already playing, does nothing. Returns the AudioSource used.
+        /// </summary>
+        public AudioSource PlayLoop(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            if (!soundMap.TryGetValue(key, out var entry))
+            {
+                Debug.LogWarning($"SfxPlayer: sound key not found: {key}");
+                return null;
+            }
+
+            if (loopSources.TryGetValue(key, out var existing) && existing != null && existing.isPlaying)
+            {
+                return existing;
+            }
+
+            // if a pending stop coroutine exists for this key, cancel it (we're restarting)
+            if (pendingStopCoroutines.TryGetValue(key, out var pend) && pend != null)
+            {
+                StopCoroutine(pend);
+                pendingStopCoroutines.Remove(key);
+            }
+
+            // get a free source (we'll use a dedicated source for loop)
+            var src = GetFreeSource();
+            src.clip = entry.clip;
+            src.loop = true;
+            src.volume = Mathf.Clamp01(entry.volume);
+            src.spatialBlend = 0f;
+            src.Play();
+
+            loopSources[key] = src;
+            loopStartTimes[key] = Time.time;
+            return src;
+        }
+
+        /// <summary>
+        /// Stop a looping sound by key. If played for less than minLoopPlayTime, stop is delayed until minimum elapsed.
+        /// </summary>
+        public void StopLoop(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            if (!loopSources.TryGetValue(key, out var src) || src == null)
+            {
+                loopSources.Remove(key);
+                loopStartTimes.Remove(key);
+                return;
+            }
+
+            float start = 0f;
+            loopStartTimes.TryGetValue(key, out start);
+            float elapsed = Time.time - start;
+            float remaining = minLoopPlayTime - elapsed;
+            if (remaining <= 0f)
+            {
+                // stop immediately
+                src.Stop();
+                src.loop = false;
+                src.clip = null;
+                loopSources.Remove(key);
+                loopStartTimes.Remove(key);
+            }
+            else
+            {
+                // schedule delayed stop if not already pending
+                if (!pendingStopCoroutines.ContainsKey(key))
+                {
+                    var c = StartCoroutine(StopLoopDelayed(key, remaining));
+                    pendingStopCoroutines[key] = c;
+                }
+            }
+        }
+
+        private System.Collections.IEnumerator StopLoopDelayed(string key, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (loopSources.TryGetValue(key, out var src) && src != null)
+            {
+                src.Stop();
+                src.loop = false;
+                src.clip = null;
+            }
+            loopSources.Remove(key);
+            loopStartTimes.Remove(key);
+            pendingStopCoroutines.Remove(key);
+        }
+
+        /// <summary>
+        /// Check if a loop with key is currently playing
+        /// </summary>
+        public bool IsLoopPlaying(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            return loopSources.TryGetValue(key, out var src) && src != null && src.isPlaying;
+        }
+
+        /// <summary>
         ///重新加载 Inspector 中配置的音效表（运行时可调用）
         /// </summary>
         public void ReloadSounds()
@@ -149,6 +257,15 @@ namespace Assets.Scripts.ForBattle.Audio
             {
                 if (s.isPlaying) s.Stop();
             }
+            // clear loop map
+            loopSources.Clear();
+            loopStartTimes.Clear();
+            // cancel pending coroutines
+            foreach (var c in pendingStopCoroutines.Values)
+            {
+                if (c != null) StopCoroutine(c);
+            }
+            pendingStopCoroutines.Clear();
         }
     }
 }
