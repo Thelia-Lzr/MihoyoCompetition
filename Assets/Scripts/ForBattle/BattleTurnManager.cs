@@ -152,6 +152,12 @@ public class BattleTurnManager : MonoBehaviour
 
             Debug.Log("当前行动单位: " + currentUnit.unitName);
 
+            // 回合开始：结算持续效果
+            if (skillSystem != null)
+            {
+                skillSystem.OnUnitTurnStart(currentUnit);
+            }
+
             // Show movement range indicator on ground if indicatorManager available
             if (indicatorManager != null)
             {

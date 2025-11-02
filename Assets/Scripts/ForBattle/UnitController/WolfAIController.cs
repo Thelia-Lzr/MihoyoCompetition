@@ -76,7 +76,16 @@ public class WolfAIController : BattleUnitController
         BattleUnit target = FindNearestPlayer();
         if (target == null)
         {
-            // 没有找到目标，略作停顿后结束回合
+            // 没有找到目标：在狼头顶显示提示飘字
+            if (skillSystem == null)
+            {
+                skillSystem = Object.FindObjectOfType<SkillSystem>();
+            }
+            if (skillSystem != null)
+            {
+                skillSystem.ShowPopup("No target", unit != null ? unit.transform.position : transform.position, Color.yellow);
+            }
+            // 略作停顿后结束回合
             yield return new WaitForSeconds(0.2f);
             yield break;
         }
@@ -111,7 +120,7 @@ public class WolfAIController : BattleUnitController
         //造成伤害（等同于自身攻击力）
         if (target != null && skillSystem != null)
         {
-            skillSystem.CauseDamage(target, unit.battleAtk, DamageType.Physics);
+            skillSystem.CauseDamage(target, unit, unit.battleAtk, DamageType.Physics);
         }
 
         // 小延迟模拟出招
@@ -127,6 +136,7 @@ public class WolfAIController : BattleUnitController
         {
             if (u == null || u == unit) continue;
             if (u.unitType != BattleUnitType.Player) continue;
+            if (u.invisible > 0) continue;
             float d = Vector3.Distance(unit.transform.position, u.transform.position);
             if (d < best)
             {

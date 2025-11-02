@@ -625,7 +625,7 @@ public class PlayerController : BattleUnitController
         if (preselectedTarget != null && skillSystem != null)
         {
             Debug.Log($"攻击目标(预选): {preselectedTarget.unitName}");
-            skillSystem.CauseDamage(preselectedTarget, unit.battleAtk, DamageType.Physics);
+            skillSystem.CauseDamage(preselectedTarget, unit, unit.battleAtk, DamageType.Physics);
             // grant battle points on successful normal attack (same as non-preselected path)
             var tmQuick = FindObjectOfType<BattleTurnManager>();
             if (tmQuick != null)
@@ -643,7 +643,7 @@ public class PlayerController : BattleUnitController
         if (selectedTarget != null && skillSystem != null)
         {
             Debug.Log($"攻击目标: {selectedTarget.unitName}");
-            skillSystem.CauseDamage(selectedTarget, unit.battleAtk, DamageType.Physics);
+            skillSystem.CauseDamage(selectedTarget, unit, unit.battleAtk, DamageType.Physics);
             // 普攻成功后积攒战技点
             var tm = FindObjectOfType<BattleTurnManager>();
             if (tm != null)

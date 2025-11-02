@@ -9,22 +9,22 @@ public class FaytController : PlayerController
 {
     [Header("Fayt Skills Settings")]
     // Power baselines (as % of battleAtk)
-    public float powerC =0.8f; // 撕裂连击（每段）
-    public float powerB =1.2f; // 背后斩击
-    public float powerBPlus =1.4f; // 流水横扫
-    public float powerAPlus =1.8f; //轮转强袭
+    public float powerC = 0.8f; // 撕裂连击（每段）
+    public float powerB = 1.2f; // 背后斩击
+    public float powerBPlus = 1.4f; // 流水横扫
+    public float powerAPlus = 1.8f; //轮转强袭
 
     [Header("Skill Costs (BP)")]
-    public int costBackstab =3; // 背后斩击
-    public int costRendCombo =2; // 撕裂连击
-    public int costShadowEye =3; // 暗影之眼
-    public int costWaterSweep =5; // 流水横扫
-    public int costRotaryAssault =6;//轮转强袭
-    public int costLateAdvantage =0;// 后发优势
+    public int costBackstab = 3; // 背后斩击
+    public int costRendCombo = 2; // 撕裂连击
+    public int costShadowEye = 3; // 暗影之眼
+    public int costWaterSweep = 5; // 流水横扫
+    public int costRotaryAssault = 6;//轮转强袭
+    public int costLateAdvantage = 0;// 后发优势
 
     [Header("AoE Settings")]
-    public float waterSweepRadius =4.5f; // 扇形半径
-    public float waterSweepAngle =90f; // 扇形角度
+    public float waterSweepRadius = 4.5f; // 扇形半径
+    public float waterSweepAngle = 90f; // 扇形角度
 
     private readonly List<string> faytSkills = new List<string>
     {
@@ -40,7 +40,7 @@ public class FaytController : PlayerController
     {
         return faytSkills;
     }
-    
+
     protected override string GetSkillExtraInfo(int index)
     {
         // 显示威力评级 + 战技点消耗
@@ -86,7 +86,7 @@ public class FaytController : PlayerController
             enough = tm.CanSpendBattlePoints(c);
         }
 
-        if (index ==0 || index ==1 || index ==4)
+        if (index == 0 || index == 1 || index == 4)
         {
             // 单体近战：高亮最近有效目标（近战范围内）
             BattleUnit target = FindNearestInRange(meleeRange);
@@ -95,7 +95,7 @@ public class FaytController : PlayerController
                 indicatorManager.CreateTargetMarker(target.transform, true);
             }
         }
-        else if (index ==3)
+        else if (index == 3)
         {
             // 扇形范围：以玩家为圆心，朝向根据镜头方向实时变化
             var sector = indicatorManager.CreateSectorIndicator(
@@ -106,11 +106,11 @@ public class FaytController : PlayerController
                 true);
 
             //取摄像机前向并投影到水平面作为朝向
-            Camera cam = Camera.main ?? (Camera.allCamerasCount >0 ? Camera.allCameras[0] : null);
+            Camera cam = Camera.main ?? (Camera.allCamerasCount > 0 ? Camera.allCameras[0] : null);
             if (cam != null)
             {
-                Vector3 camFwd = cam.transform.forward; camFwd.y =0f;
-                if (camFwd.sqrMagnitude >0.001f)
+                Vector3 camFwd = cam.transform.forward; camFwd.y = 0f;
+                if (camFwd.sqrMagnitude > 0.001f)
                 {
                     indicatorManager.UpdateSectorRotation(sector, transform, camFwd.normalized);
                 }
@@ -152,7 +152,7 @@ public class FaytController : PlayerController
         Vector3 toAttacker = (transform.position - target.transform.position).normalized;
         float dot = Mathf.Abs(Vector3.Dot(target.transform.right, toAttacker));
         // 与左右方向接近，认为侧面
-        return dot >0.7f;
+        return dot > 0.7f;
     }
 
     private BattleUnit FindNearestInRange(float range)
@@ -183,110 +183,112 @@ public class FaytController : PlayerController
         switch (index)
         {
             case 0: // 背后斩击：单体近战，背后伤害翻倍
-            {
-                BattleUnit target = RaycastUnitUnderCursor(cam);
-                if (target == null) target = FindNearestInRange(meleeRange);
-                if (target == null || !IsValidTarget(target) || Vector3.Distance(transform.position, target.transform.position) > meleeRange)
                 {
-                    if (sfxPlayer != null) sfxPlayer.Play("Error");
-                    skillReselectRequested = true;
-                    return false;
-                }
-                if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
-                int dmg = CalcDamage(powerB);
-                if (IsBehind(target)) dmg *=2;
-                skillSystem?.CauseDamage(target, dmg, DamageType.Physics);
-                skillReselectRequested = false;
-                return true;
-            }
-            case 1: // 撕裂连击：单体近战，两段，侧面额外提升（以伤害加作为例）
-            {
-                BattleUnit target = RaycastUnitUnderCursor(cam);
-                if (target == null) target = FindNearestInRange(meleeRange);
-                if (target == null || !IsValidTarget(target) || Vector3.Distance(transform.position, target.transform.position) > meleeRange)
-                {
-                    if (sfxPlayer != null) sfxPlayer.Play("Error");
-                    skillReselectRequested = true;
-                    return false;
-                }
-                if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
-                float bonus = IsSide(target) ?1.25f :1f;
-                int hit1 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
-                int hit2 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
-                skillSystem?.CauseDamage(target, hit1, DamageType.Physics);
-                skillSystem?.CauseDamage(target, hit2, DamageType.Physics);
-                skillReselectRequested = false;
-                return true;
-            }
-            case 2: // 暗影之眼：自身增益与隐身（这里以日志提示为主）
-            {
-                if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
-                Debug.Log("[Fayt] 暗影之眼：攻击上升并获得隐身（占位实现）");
-                // TODO: 接入状态系统：提高攻击、设置隐身标记
-                skillReselectRequested = false;
-                return true;
-            }
-            case 3: // 流水横扫：扇形范围群体伤害并降防
-            {
-                if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
-                int applied =0;
-                Vector3 origin = transform.position;
-                // 使用镜头方向作为朝向（使用外层 cam变量）
-                Vector3 forward = transform.forward;
-                if (cam != null)
-                {
-                    Vector3 camFwd = cam.transform.forward; camFwd.y =0f;
-                    if (camFwd.sqrMagnitude >0.001f) forward = camFwd.normalized;
-                }
-                foreach (var u in FindObjectsOfType<BattleUnit>())
-                {
-                    if (!IsValidTarget(u)) continue;
-                    Vector3 dir = (u.transform.position - origin); dir.y =0f;
-                    if (dir.magnitude <= waterSweepRadius)
+                    BattleUnit target = RaycastUnitUnderCursor(cam);
+                    if (target == null) target = FindNearestInRange(meleeRange);
+                    if (target == null || !IsValidTarget(target) || Vector3.Distance(transform.position, target.transform.position) > meleeRange)
                     {
-                        float ang = Vector3.Angle(forward, dir.normalized);
-                        if (ang <= waterSweepAngle *0.5f)
-                        {
-                            skillSystem?.CauseDamage(u, CalcDamage(powerBPlus), DamageType.Physics);
-                            // 简易降防（占位）：降低10 点物防
-                            u.battleDef = Mathf.Max(0, u.battleDef - 10);
-                            applied++;
-                        }
+                        if (sfxPlayer != null) sfxPlayer.Play("Error");
+                        skillReselectRequested = true;
+                        return false;
                     }
-                }
-                Debug.Log($"[Fayt] 流水横扫 命中 {applied} 个目标");
-                skillReselectRequested = false;
-                return true;
-            }
-            case 4: //轮转强袭：单体近战大伤害
-            {
-                BattleUnit target = RaycastUnitUnderCursor(cam);
-                if (target == null) target = FindNearestInRange(meleeRange);
-                if (target == null || !IsValidTarget(target) || Vector3.Distance(transform.position, target.transform.position) > meleeRange)
-                {
-                    if (sfxPlayer != null) sfxPlayer.Play("Error");
-                    skillReselectRequested = true;
-                    return false;
-                }
-                if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
-                skillSystem?.CauseDamage(target, CalcDamage(powerAPlus), DamageType.Physics);
-                skillReselectRequested = false;
-                return true;
-            }
-            case 5: // 后发优势：损失一半生命，回复4BP
-            {
-                if (tm != null)
-                {
-                    int half = Mathf.Max(1, unit.battleMaxHp /2);
-                    unit.battleHp = Mathf.Max(1, unit.battleHp - half);
-                    tm.AddBattlePoints(4);
+                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
+                    int dmg = CalcDamage(powerB);
+                    if (IsBehind(target)) dmg *= 2;
+                    skillSystem?.CauseDamage(target, unit, dmg, DamageType.Physics);
                     skillReselectRequested = false;
                     return true;
                 }
-                if (sfxPlayer != null) sfxPlayer.Play("Error");
-                skillReselectRequested = true;
-                return false;
-            }
+            case 1: // 撕裂连击：单体近战，两段，侧面额外提升（以伤害加作为例）
+                {
+                    BattleUnit target = RaycastUnitUnderCursor(cam);
+                    if (target == null) target = FindNearestInRange(meleeRange);
+                    if (target == null || !IsValidTarget(target) || Vector3.Distance(transform.position, target.transform.position) > meleeRange)
+                    {
+                        if (sfxPlayer != null) sfxPlayer.Play("Error");
+                        skillReselectRequested = true;
+                        return false;
+                    }
+                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
+                    float bonus = IsSide(target) ? 1.25f : 1f;
+                    int hit1 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
+                    int hit2 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
+                    skillSystem?.CauseDamage(target, unit, hit1, DamageType.Physics);
+                    skillSystem?.CauseDamage(target, unit, hit2, DamageType.Physics);
+                    skillReselectRequested = false;
+                    return true;
+                }
+            case 2: // 暗影之眼：自身增益与隐身（这里以日志提示为主）
+                {
+                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
+                    Debug.Log("[Fayt] 暗影之眼：攻击上升并获得隐身（占位实现）");
+                    unit.battleAtk = Mathf.RoundToInt(unit.battleAtk * 1.2f); // 提高20%攻击力（占位实现）
+                                                                              // TODO: 接入状态系统：提高攻击、设置隐身标记
+                    skillReselectRequested = false;
+                    return true;
+                }
+            case 3: // 流水横扫：扇形范围群体伤害并降防
+                {
+                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
+                    int applied = 0;
+                    Vector3 origin = transform.position;
+                    // 使用镜头方向作为朝向（使用外层 cam变量）
+                    Vector3 forward = transform.forward;
+                    if (cam != null)
+                    {
+                        Vector3 camFwd = cam.transform.forward; camFwd.y = 0f;
+                        if (camFwd.sqrMagnitude > 0.001f) forward = camFwd.normalized;
+                    }
+                    foreach (var u in FindObjectsOfType<BattleUnit>())
+                    {
+                        if (!IsValidTarget(u)) continue;
+                        Vector3 dir = (u.transform.position - origin); dir.y = 0f;
+                        if (dir.magnitude <= waterSweepRadius)
+                        {
+                            float ang = Vector3.Angle(forward, dir.normalized);
+                            if (ang <= waterSweepAngle * 0.5f)
+                            {
+                                skillSystem?.CauseDamage(u, unit, CalcDamage(powerBPlus), DamageType.Physics);
+                                // 简易降防（占位）：降低10 点物防
+                                u.battleDef = Mathf.Max(0, u.battleDef - 10);
+                                applied++;
+                            }
+                        }
+                    }
+                    Debug.Log($"[Fayt] 流水横扫 命中 {applied} 个目标");
+                    skillReselectRequested = false;
+                    return true;
+                }
+            case 4: //轮转强袭：单体近战大伤害
+                {
+                    BattleUnit target = RaycastUnitUnderCursor(cam);
+                    if (target == null) target = FindNearestInRange(meleeRange);
+                    if (target == null || !IsValidTarget(target) || Vector3.Distance(transform.position, target.transform.position) > meleeRange)
+                    {
+                        if (sfxPlayer != null) sfxPlayer.Play("Error");
+                        skillReselectRequested = true;
+                        return false;
+                    }
+                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return false; }
+                    skillSystem?.CauseDamage(target, unit, CalcDamage(powerAPlus), DamageType.Physics);
+                    skillReselectRequested = false;
+                    return true;
+                }
+            case 5: // 后发优势：损失一半生命，回复4BP
+                {
+                    if (tm != null)
+                    {
+                        int half = Mathf.Max(1, unit.battleMaxHp / 2);
+                        skillSystem.CauseDamage(unit, unit, half, DamageType.True);
+                        //unit.battleHp = Mathf.Max(1, unit.battleHp - half);
+                        tm.AddBattlePoints(4);
+                        skillReselectRequested = false;
+                        return true;
+                    }
+                    if (sfxPlayer != null) sfxPlayer.Play("Error");
+                    skillReselectRequested = true;
+                    return false;
+                }
         }
         return false;
     }
@@ -295,7 +297,7 @@ public class FaytController : PlayerController
     {
         if (cam == null) return null;
         Ray ray = cam.ScreenPointToRay(Input.mousePosition);
-        if (Physics.Raycast(ray, out RaycastHit hit,100f))
+        if (Physics.Raycast(ray, out RaycastHit hit, 100f))
         {
             return hit.collider.GetComponentInParent<BattleUnit>();
         }
@@ -327,8 +329,8 @@ public class FaytController : PlayerController
             if (target == null) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
             if (tm != null && !tm.TrySpendBattlePoints(costBackstab)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
             int dmg = CalcDamage(powerB);
-            if (IsBehind(target)) dmg *=2;
-            skillSystem?.CauseDamage(target, dmg, DamageType.Physics);
+            if (IsBehind(target)) dmg *= 2;
+            skillSystem?.CauseDamage(target, unit, dmg, DamageType.Physics);
         });
         yield return new WaitForSeconds(0.4f);
     }
@@ -341,11 +343,11 @@ public class FaytController : PlayerController
         {
             if (target == null) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
             if (tm != null && !tm.TrySpendBattlePoints(costRendCombo)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-            float bonus = IsSide(target) ?1.25f :1f;
+            float bonus = IsSide(target) ? 1.25f : 1f;
             int hit1 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
             int hit2 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
-            skillSystem?.CauseDamage(target, hit1, DamageType.Physics);
-            skillSystem?.CauseDamage(target, hit2, DamageType.Physics);
+            skillSystem?.CauseDamage(target, unit, hit1, DamageType.Physics);
+            skillSystem?.CauseDamage(target, unit, hit2, DamageType.Physics);
         });
         yield return new WaitForSeconds(0.5f);
     }
@@ -368,19 +370,19 @@ public class FaytController : PlayerController
         yield return UseDirectionSelection((dir) =>
         {
             if (tm != null && !tm.TrySpendBattlePoints(costWaterSweep)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-            int applied =0;
+            int applied = 0;
             Vector3 origin = transform.position;
             foreach (var u in FindObjectsOfType<BattleUnit>())
             {
                 if (!IsValidTarget(u)) continue;
-                Vector3 v = (u.transform.position - origin); v.y =0f;
+                Vector3 v = (u.transform.position - origin); v.y = 0f;
                 if (v.magnitude <= waterSweepRadius)
                 {
                     float ang = Vector3.Angle(dir, v.normalized);
-                    if (ang <= waterSweepAngle *0.5f)
+                    if (ang <= waterSweepAngle * 0.5f)
                     {
-                        skillSystem?.CauseDamage(u, CalcDamage(powerBPlus), DamageType.Physics);
-                        u.battleDef = Mathf.Max(0, u.battleDef -10);
+                        skillSystem?.CauseDamage(u, unit, CalcDamage(powerBPlus), DamageType.Physics);
+                        u.battleDef = Mathf.Max(0, u.battleDef - 10);
                         applied++;
                     }
                 }
@@ -398,7 +400,7 @@ public class FaytController : PlayerController
         {
             if (target == null) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
             if (tm != null && !tm.TrySpendBattlePoints(costRotaryAssault)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-            skillSystem?.CauseDamage(target, CalcDamage(powerAPlus), DamageType.Physics);
+            skillSystem?.CauseDamage(target, unit, CalcDamage(powerAPlus), DamageType.Physics);
         });
         yield return new WaitForSeconds(0.5f);
     }
@@ -407,7 +409,7 @@ public class FaytController : PlayerController
     {
         var tm = FindObjectOfType<BattleTurnManager>();
         if (tm == null) yield break;
-        int half = Mathf.Max(1, unit.battleMaxHp /2);
+        int half = Mathf.Max(1, unit.battleMaxHp / 2);
         unit.battleHp = Mathf.Max(1, unit.battleHp - half);
         tm.AddBattlePoints(4);
         Debug.Log("[Fayt] 后发优势：损失一半生命，回复4BP");
