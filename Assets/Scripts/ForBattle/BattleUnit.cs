@@ -25,6 +25,9 @@ public class BattleUnit : MonoBehaviour
     [Tooltip("单位攻击力")]
     public int atk;
 
+    [Tooltip("单位法术攻击力")]
+    public int magicAtk;
+
     [Tooltip("单位物理防御力")]
     public int def;
 
@@ -45,6 +48,9 @@ public class BattleUnit : MonoBehaviour
     [Tooltip("单位攻击力")]
     public int battleAtk;
 
+    [Tooltip("单位法术攻击力")]
+    public int battleMagicAtk;
+
     [Tooltip("单位防御力")]
     public int battleDef;
 
@@ -59,6 +65,10 @@ public class BattleUnit : MonoBehaviour
 
     [Tooltip("单位位置")]
     public Vector2 battlePos;
+
+    [Header("Camera Follow")]
+    [Tooltip("相机跟随/观察的根节点(可选)。若为空将使用单位根Transform")]
+    public Transform cameraRoot;
 
     // Controller component (can be PlayerController, AIController, etc.)
     [HideInInspector]

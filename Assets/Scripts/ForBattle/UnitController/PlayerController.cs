@@ -29,6 +29,32 @@ public class PlayerController : BattleUnitController
     [Tooltip("Assign a child transform that contains only the visible model. If null, the controller will not rotate the root transform to avoid rotating attached cameras.")]
     public Transform visualRoot;
 
+    [Header("Animation Settings")]
+    [Tooltip("Rotate the visual model to face movement direction (recommended for VRM). If visualRoot is set, only that transform rotates.")]
+    public bool faceMoveDirection = true;
+    [Tooltip("Slerp speed for facing rotation.")]
+    public float turnSpeed = 10f;
+    [Tooltip("Animator float parameter used by locomotion blend tree (e.g., 'Speed').")]
+    public string animatorSpeedParam = "Speed";
+    [Tooltip("Normalize speed sent to Animator (0..1). If false, sends units/sec.")]
+    public bool normalizeAnimatorSpeed = true;
+    [Tooltip("Multiplier applied to the value sent to Animator.")]
+    public float animatorSpeedScale =1f;
+    private Animator cachedAnimator;
+    [Tooltip("Optional Animator float parameter for turning (Unity-Chan uses 'Direction').")]
+    public string animatorDirectionParam = "Direction";
+    [Tooltip("Optional Animator bool parameter for grounded state.")]
+    public string animatorGroundedParam = "Grounded";
+    [Tooltip("Optional Animator float parameter for forward speed (Standard Assets uses 'Forward').")]
+    public string animatorForwardParam = "Forward";
+    [Tooltip("Optional Animator float parameter for turn amount (Standard Assets uses 'Turn').")]
+    public string animatorTurnParam = "Turn";
+    private bool animHasSpeedParam;
+    private bool animHasDirectionParam;
+    private bool animHasGroundedParam;
+    private bool animHasForwardParam;
+    private bool animHasTurnParam;
+
     [Header("Target Selection Settings")]
     public float targetSelectionRange = 10f;
     public float sectorAngle = 60f;
@@ -36,7 +62,7 @@ public class PlayerController : BattleUnitController
     public LayerMask unitLayerMask;
     [Header("Combat Ranges")]
     [Tooltip("近战范围（用于普攻和近战选择性技能）")]
-    public float meleeRange = 1.5f;
+    public float meleeRange = 2.5f;
 
     // 当前选择模式
     protected enum SelectionMode
@@ -67,6 +93,8 @@ public class PlayerController : BattleUnitController
     private bool skillQuickCasted = false;
     // request to reopen selection if a skill couldn't execute due to invalid target/resources
     protected bool skillReselectRequested = false;
+    // track previous frame position to compute actual velocity for animator
+    private Vector3 _prevFramePos;
 
     public override void OnBattleStart()
     {
@@ -77,6 +105,13 @@ public class PlayerController : BattleUnitController
             indicatorManager = FindObjectOfType<BattleIndicatorManager>();
         if (skillSystem == null)
             skillSystem = FindObjectOfType<SkillSystem>();
+        // Cache Animator from visual root (VRM Animator usually lives on a child)
+        if (cachedAnimator == null)
+        {
+            var root = visualRoot != null ? visualRoot : transform;
+            cachedAnimator = root.GetComponentInChildren<Animator>();
+        }
+        MapAnimatorParameters();
     }
 
     public override void OnBattleEnd()
@@ -95,6 +130,7 @@ public class PlayerController : BattleUnitController
 
         originalPosition = transform.position;
         isMoving = false;
+        _prevFramePos = transform.position;
 
         Debug.Log($"[PlayerController] {unit.unitName} 的回合开始");
         skillQuickCasted = false;
@@ -326,7 +362,7 @@ public class PlayerController : BattleUnitController
                         int idx = (slc != null) ? slc.GetSelectedIndex() : -1;
                         // 在尝试前重置重选标志，由技能在失败时设置
                         skillReselectRequested = false;
-                        if (idx >=0 && TryQuickCastSkill(idx))
+                        if (idx >= 0 && TryQuickCastSkill(idx))
                         {
                             selectedAction = BattleCanvasController.BattleActionType.Skill;
                             skillQuickCasted = true;
@@ -438,6 +474,13 @@ public class PlayerController : BattleUnitController
     protected virtual void HandleMovement()
     {
         if (unit == null) return;
+        if (cachedAnimator == null)
+        {
+            // Try to re-cache animator if model swapped at runtime
+            var root = visualRoot != null ? visualRoot : transform;
+            cachedAnimator = root.GetComponentInChildren<Animator>();
+            if (cachedAnimator != null) MapAnimatorParameters();
+        }
 
         // Read raw WASD input as axes
         float h = 0f;
@@ -447,66 +490,128 @@ public class PlayerController : BattleUnitController
         if (Input.GetKey(KeyCode.D)) h += 1f;
         if (Input.GetKey(KeyCode.A)) h -= 1f;
 
-        Vector3 moveInput = new Vector3(h, 0f, v);
-        // determine if player is providing movement input (use input rather than actual position)
-        bool inputMoving = Mathf.Abs(h) > 0.001f || Mathf.Abs(v) > 0.001f;
-        if (inputMoving && !isMoving)
+        Vector3 moveInput = new Vector3(h,0f, v);
+        bool inputMoving = Mathf.Abs(h) >0.001f || Mathf.Abs(v) >0.001f;
+
+        // Convert input to camera-relative direction on XZ plane
+        if (inputMoving)
         {
-            // started moving
+        Camera cam = null;
+        if (cameraController != null && cameraController.gameObject != null)
+        {
+            cam = Camera.main; // prefer main camera
+        }
+        if (cam == null) cam = Camera.main;
+        if (cam != null)
+        {
+            Vector3 camForward = cam.transform.forward; camForward.y =0f; camForward.Normalize();
+            Vector3 camRight = cam.transform.right; camRight.y =0f; camRight.Normalize();
+            Vector3 camMove = camRight * moveInput.x + camForward * moveInput.z;
+            moveInput = camMove.sqrMagnitude >0.0001f ? camMove.normalized : Vector3.zero;
+        }
+        else
+        {
+            moveInput = moveInput.normalized;
+        }
+        }
+        else
+        {
+        moveInput = Vector3.zero;
+        }
+
+        // Apply movement (only if will remain within moveRange)
+        Vector3 prevPos = transform.position;
+        Vector3 candidate = transform.position + moveInput * moveSpeed * Time.deltaTime;
+        if (Vector3.Distance(originalPosition, candidate) <= moveRange)
+        {
+            transform.position = candidate;
+        }
+
+        // Update battle pos from actual transform
+        unit.battlePos = new Vector2(transform.position.x, transform.position.z);
+
+        // Compute actual planar speed from displacement this frame
+        Vector3 delta = transform.position - prevPos;
+        float actualPlanarSpeed = new Vector3(delta.x,0f, delta.z).magnitude / Mathf.Max(Time.deltaTime,0.0001f);
+        bool actuallyMoving = actualPlanarSpeed >0.05f;
+
+        // Footsteps based on actual movement
+        if (actuallyMoving && !isMoving)
+        {
             isMoving = true;
             if (sfxPlayer != null && !string.IsNullOrEmpty(stepLoopKey)) sfxPlayer.PlayLoop(stepLoopKey);
         }
-        else if (!inputMoving && isMoving)
+        else if (!actuallyMoving && isMoving)
         {
-            // stopped moving
             isMoving = false;
             if (sfxPlayer != null && !string.IsNullOrEmpty(stepLoopKey)) sfxPlayer.StopLoop(stepLoopKey);
         }
 
-        if (moveInput.sqrMagnitude <= 0.0001f) return;
-
-        // Determine camera basis (prefer camera from cameraController if provided)
-        Camera cam = null;
-        if (cameraController != null && cameraController.gameObject != null)
+        // Face camera-relative input direction while there is input (WASD relative to camera)
+        if (faceMoveDirection && inputMoving)
         {
-            cam = Camera.main; // cameraController may not expose camera directly; prefer main camera
-        }
-        if (cam == null) cam = Camera.main;
-        if (cam == null)
-        {
-            // fallback to world-relative movement
-            moveInput = moveInput.normalized;
-        }
-        else
-        {
-            // Convert input (h,v) into camera-relative movement on the XZ plane
-            Vector3 camForward = cam.transform.forward;
-            camForward.y = 0f;
-            camForward.Normalize();
-            Vector3 camRight = cam.transform.right;
-            camRight.y = 0f;
-            camRight.Normalize();
-
-            // moveInput.z is forward/back, x is right/left
-            Vector3 camMove = camRight * moveInput.x + camForward * moveInput.z;
-            if (inputMoving && camMove.sqrMagnitude > 0.0001f) moveInput = camMove.normalized;
-            else moveInput = Vector3.zero;
+            Vector3 faceDir = new Vector3(moveInput.x,0f, moveInput.z);
+            if (faceDir.sqrMagnitude >0.0001f)
+            {
+                Transform rotT = visualRoot != null ? visualRoot : transform;
+                Quaternion targetRot = Quaternion.LookRotation(faceDir.normalized, Vector3.up);
+                rotT.rotation = Quaternion.Slerp(rotT.rotation, targetRot, Mathf.Clamp01(turnSpeed * Time.deltaTime));
+            }
         }
 
-        // Apply movement
-        Vector3 newPos = transform.position + moveInput * moveSpeed * Time.deltaTime;
-
-        // Clamp movement within allowed range from original position
-        if (Vector3.Distance(originalPosition, newPos) <= moveRange)
+        // Drive Animator from actual movement
+        if (cachedAnimator != null)
         {
-            transform.position = newPos;
-            unit.battlePos = new Vector2(newPos.x, newPos.z);
+            float speedValue = normalizeAnimatorSpeed ? (actualPlanarSpeed / Mathf.Max(0.0001f, moveSpeed)) : actualPlanarSpeed;
+            if (!actuallyMoving) speedValue =0f;
 
-            // Do not rotate the root or visual model here. WASD should only move the unit
-            // relative to the camera forward/right directions and must not affect camera angle.
-            // If you want the visual model to face movement direction without affecting the
-            // camera, handle that in the character's animation controller or set `visualRoot`
-            // rotation elsewhere. Leaving this blank ensures camera angle remains unchanged.
+            if (animHasSpeedParam && !string.IsNullOrEmpty(animatorSpeedParam))
+            {
+                cachedAnimator.SetFloat(animatorSpeedParam, speedValue * animatorSpeedScale);
+            }
+
+            // Direction/Turn relative to current forward and desired (camera-relative) input
+            Vector3 desired = new Vector3(moveInput.x,0f, moveInput.z);
+            Transform rotT = visualRoot != null ? visualRoot : transform;
+            Vector3 curFwd = rotT.forward; curFwd.y =0f; if (curFwd.sqrMagnitude >0f) curFwd.Normalize();
+
+            if (animHasDirectionParam && !string.IsNullOrEmpty(animatorDirectionParam))
+            {
+                float dirVal =0f;
+                if (inputMoving && desired.sqrMagnitude >0.0001f && curFwd.sqrMagnitude >0.0001f)
+                {
+                    float ang = Vector3.SignedAngle(curFwd, desired.normalized, Vector3.up);
+                    dirVal = Mathf.Clamp(ang /120f, -1f,1f);
+                }
+                cachedAnimator.SetFloat(animatorDirectionParam, dirVal);
+            }
+
+            if (animHasForwardParam && !string.IsNullOrEmpty(animatorForwardParam))
+            {
+                float forwardAmount = speedValue; // already normalized if option enabled
+                if (!normalizeAnimatorSpeed)
+                {
+                    // if sending units/sec, clamp to [0,1] for Forward
+                    forwardAmount = Mathf.Clamp01(forwardAmount / Mathf.Max(0.0001f, moveSpeed));
+                }
+                cachedAnimator.SetFloat(animatorForwardParam, forwardAmount * animatorSpeedScale);
+            }
+
+            if (animHasTurnParam && !string.IsNullOrEmpty(animatorTurnParam))
+            {
+                float turn =0f;
+                if (inputMoving && desired.sqrMagnitude >0.0001f && curFwd.sqrMagnitude >0.0001f)
+                {
+                    float ang = Vector3.SignedAngle(curFwd, desired.normalized, Vector3.up);
+                    turn = Mathf.Clamp(ang /180f, -1f,1f);
+                }
+                cachedAnimator.SetFloat(animatorTurnParam, turn);
+            }
+
+            if (animHasGroundedParam && !string.IsNullOrEmpty(animatorGroundedParam))
+            {
+                cachedAnimator.SetBool(animatorGroundedParam, true);
+            }
         }
     }
 
@@ -521,6 +626,12 @@ public class PlayerController : BattleUnitController
         {
             Debug.Log($"攻击目标(预选): {preselectedTarget.unitName}");
             skillSystem.CauseDamage(preselectedTarget, unit.battleAtk, DamageType.Physics);
+            // grant battle points on successful normal attack (same as non-preselected path)
+            var tmQuick = FindObjectOfType<BattleTurnManager>();
+            if (tmQuick != null)
+            {
+                tmQuick.AddBattlePoints(tmQuick.pointsPerNormalAttack);
+            }
             preselectedTarget = null;
             yield return new WaitForSeconds(0.5f);
             yield break;
@@ -587,7 +698,7 @@ public class PlayerController : BattleUnitController
         var names = GetSkillNames();
         if (names == null) return null;
         var list = new List<string>(names.Count);
-        for (int i =0; i < names.Count; i++)
+        for (int i = 0; i < names.Count; i++)
         {
             string extra = GetSkillExtraInfo(i);
             if (!string.IsNullOrEmpty(extra)) list.Add($"{names[i]} ({extra})");
@@ -663,21 +774,21 @@ public class PlayerController : BattleUnitController
             battleUI.UpdatePrompt("选择目标 (Tab切换/鼠标左键确认/Esc取消)");
 
         List<BattleUnit> validTargets = GetValidTargets(maxRange);
-        int currentIndex =0;
+        int currentIndex = 0;
 
         while (currentSelectionMode == SelectionMode.TargetSelection)
         {
             // Tab 切换目标
             if (Input.GetKeyDown(KeyCode.Tab))
             {
-                if (validTargets.Count >0)
+                if (validTargets.Count > 0)
                 {
-                    currentIndex = (currentIndex +1) % validTargets.Count;
+                    currentIndex = (currentIndex + 1) % validTargets.Count;
                 }
             }
 
             // 显示当前目标标记
-            if (validTargets.Count >0 && indicatorManager != null)
+            if (validTargets.Count > 0 && indicatorManager != null)
             {
                 selectedTarget = validTargets[currentIndex];
                 indicatorManager.ShowTargetMarker(selectedTarget.transform);
@@ -691,7 +802,7 @@ public class PlayerController : BattleUnitController
                 if (cam2 != null)
                 {
                     Ray rayClick = cam2.ScreenPointToRay(Input.mousePosition);
-                    if (Physics.Raycast(rayClick, out RaycastHit hitClick,100f))
+                    if (Physics.Raycast(rayClick, out RaycastHit hitClick, 100f))
                     {
                         var clicked = hitClick.collider.GetComponentInParent<BattleUnit>();
                         if (clicked != null && IsValidTarget(clicked) && Vector3.Distance(transform.position, clicked.transform.position) <= maxRange)
@@ -972,5 +1083,53 @@ public class PlayerController : BattleUnitController
             return true;
         }
         return false;
+    }
+
+    // Map animator parameter names to what's actually on the controller (Unity-Chan / Standard Assets / custom)
+    private void MapAnimatorParameters()
+    {
+        animHasSpeedParam = animHasDirectionParam = animHasGroundedParam = false;
+        animHasForwardParam = animHasTurnParam = false;
+        if (cachedAnimator == null) return;
+
+        // Candidates arrays
+        string[] speedCandidates = new[] { animatorSpeedParam, "Speed", "Forward", "MoveSpeed" };
+        string[] dirCandidates = new[] { animatorDirectionParam, "Direction", "TurnSpeed", "AngularSpeed" };
+        string[] forwardCandidates = new[] { animatorForwardParam, "Forward", "Speed" };
+        string[] turnCandidates = new[] { animatorTurnParam, "Turn", "Direction" };
+        string[] groundedCandidates = new[] { animatorGroundedParam, "Grounded", "isGround", "IsGround", "IsGrounded" };
+
+        // Scan parameters once
+        var ps = cachedAnimator.parameters;
+        System.Func<string[], AnimatorControllerParameterType, string> find = (cands, type) =>
+        {
+            foreach (var c in cands)
+            {
+                if (string.IsNullOrEmpty(c)) continue;
+                foreach (var p in ps)
+                {
+                    if (p.type == type && p.name == c) return c;
+                }
+            }
+            return null;
+        };
+
+        var sp = find(speedCandidates, AnimatorControllerParameterType.Float);
+        if (!string.IsNullOrEmpty(sp)) { animatorSpeedParam = sp; animHasSpeedParam = true; }
+
+        var dp = find(dirCandidates, AnimatorControllerParameterType.Float);
+        if (!string.IsNullOrEmpty(dp)) { animatorDirectionParam = dp; animHasDirectionParam = true; }
+
+        var fp = find(forwardCandidates, AnimatorControllerParameterType.Float);
+        if (!string.IsNullOrEmpty(fp)) { animatorForwardParam = fp; animHasForwardParam = true; }
+
+        var tp = find(turnCandidates, AnimatorControllerParameterType.Float);
+        if (!string.IsNullOrEmpty(tp)) { animatorTurnParam = tp; animHasTurnParam = true; }
+
+        var gp = find(groundedCandidates, AnimatorControllerParameterType.Bool);
+        if (!string.IsNullOrEmpty(gp)) { animatorGroundedParam = gp; animHasGroundedParam = true; }
+
+        // Ensure root motion doesn't block scripted move
+        cachedAnimator.applyRootMotion = false;
     }
 }

@@ -208,12 +208,15 @@ public class BattleTurnManager : MonoBehaviour
                 if (previousUnit != null && previousUnit != currentUnit)
                 {
                     // perform transition and wait
-                    yield return StartCoroutine(cameraController.TransitionToTarget(previousUnit.transform, currentUnit.transform, desiredOffset, cameraController.blendTime));
+                    Transform fromT = previousUnit.cameraRoot != null ? previousUnit.cameraRoot : previousUnit.transform;
+                    Transform toT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
+                    yield return StartCoroutine(cameraController.TransitionToTarget(fromT, toT, desiredOffset, cameraController.blendTime));
                 }
                 else
                 {
                     // No previous unit, just focus immediately
-                    cameraController.FocusImmediate(currentUnit.transform, desiredOffset);
+                    Transform toT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
+                    cameraController.FocusImmediate(toT, desiredOffset);
 
                     // wait blend
                     yield return new WaitForSeconds(cameraController.blendTime);
@@ -251,7 +254,9 @@ public class BattleTurnManager : MonoBehaviour
 
                     if (target != null && cameraController != null)
                     {
-                        yield return StartCoroutine(cameraController.PlayActionCam(currentUnit.transform, target.transform, new Vector3(0f, 1.0f, -1.5f), 0.7f));
+                        Transform actorT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
+                        Transform targetT = target.cameraRoot != null ? target.cameraRoot : target.transform;
+                        yield return StartCoroutine(cameraController.PlayActionCam(actorT, targetT, new Vector3(0f,1.0f, -1.5f),0.7f));
                     }
                     else
                     {

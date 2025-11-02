@@ -141,9 +141,10 @@ public class FaytController : PlayerController
     private bool IsBehind(BattleUnit target)
     {
         Vector3 toAttacker = (transform.position - target.transform.position).normalized;
+        // dot >0 → 攻击者在目标前方；dot <0 → 攻击者在目标后方
         float dot = Vector3.Dot(target.transform.forward, toAttacker);
-        // >0.5约等于在背后60 度扇形内
-        return dot >0.5f;
+        // < -0.5约等于在背后60°以内
+        return dot < -0.5f;
     }
 
     private bool IsSide(BattleUnit target)
@@ -248,7 +249,7 @@ public class FaytController : PlayerController
                         {
                             skillSystem?.CauseDamage(u, CalcDamage(powerBPlus), DamageType.Physics);
                             // 简易降防（占位）：降低10 点物防
-                            u.battleDef = Mathf.Max(0, u.battleDef -10);
+                            u.battleDef = Mathf.Max(0, u.battleDef - 10);
                             applied++;
                         }
                     }
@@ -353,6 +354,7 @@ public class FaytController : PlayerController
     {
         var tm = FindObjectOfType<BattleTurnManager>();
         if (tm != null && !tm.TrySpendBattlePoints(costShadowEye)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+        unit.battleAtk = Mathf.RoundToInt(unit.battleAtk * 1.2f); // 提高20%攻击力（占位实现）
         Debug.Log("[Fayt] 暗影之眼：攻击上升并获得隐身（占位实现）");
         yield return new WaitForSeconds(0.3f);
     }
