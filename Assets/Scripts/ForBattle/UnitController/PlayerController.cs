@@ -17,7 +17,7 @@ public class PlayerController : BattleUnitController
     public BattleIndicatorManager indicatorManager;
     public SkillSystem skillSystem;
     public BattleCameraController cameraController;
-    public SfxPlayer sfxPlayer;
+    //public SfxPlayer sfxPlayer;
     [Header("Audio")]
     public string stepLoopKey = "Steps"; // key in SfxPlayer sounds table for footsteps loop
 
@@ -39,7 +39,7 @@ public class PlayerController : BattleUnitController
     [Tooltip("Normalize speed sent to Animator (0..1). If false, sends units/sec.")]
     public bool normalizeAnimatorSpeed = true;
     [Tooltip("Multiplier applied to the value sent to Animator.")]
-    public float animatorSpeedScale =1f;
+    public float animatorSpeedScale = 1f;
     private Animator cachedAnimator;
     [Tooltip("Optional Animator float parameter for turning (Unity-Chan uses 'Direction').")]
     public string animatorDirectionParam = "Direction";
@@ -56,13 +56,15 @@ public class PlayerController : BattleUnitController
     private bool animHasTurnParam;
 
     [Header("Target Selection Settings")]
-    public float targetSelectionRange = 10f;
+    public float targetSelectionRange = 3f;
     public float sectorAngle = 60f;
     public float circleRadius = 3f;
     public LayerMask unitLayerMask;
     [Header("Combat Ranges")]
     [Tooltip("近战范围（用于普攻和近战选择性技能）")]
     public float meleeRange = 2.5f;
+
+    protected bool end;
 
     // 当前选择模式
     protected enum SelectionMode
@@ -86,9 +88,10 @@ public class PlayerController : BattleUnitController
     // track last menu choice to detect transitions (so entering Skill forces preview update)
     private int lastChoice = -1;
     // keep reference to created movement range indicator
-    private GameObject movementRangeIndicator = null;
+    protected GameObject movementRangeIndicator = null;
     // indicator that follows the unit to show current skill cast range
-    private GameObject skillRangeIndicator = null;
+    protected GameObject skillRangeIndicator = null;
+    protected GameObject attackRangeIndicator = null;
     // track if a skill has been executed directly (quick cast)
     private bool skillQuickCasted = false;
     // request to reopen selection if a skill couldn't execute due to invalid target/resources
@@ -180,10 +183,19 @@ public class PlayerController : BattleUnitController
 
             // 等待玩家确认或允许移动
             SkillListController slc = (battleUI != null) ? battleUI.skillListController : null;
-
+            BattleCanvasController.BattleActionType prevChoice;
+            prevChoice = BattleCanvasController.BattleActionType.Attack;
             // 等待玩家确认或允许移动
             while (!actionConfirmed)
             {
+                
+                if (prevChoice != battleUI.Choice)
+                {
+                    indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
+                    indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
+                    indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
+                    
+                }
                 // allow movement and QE selection
                 HandleMovement();
                 HandleSelectionSwitch(ref actionConfirmed);
@@ -250,14 +262,15 @@ public class PlayerController : BattleUnitController
                             }
                         }
                     }
-
                     // 显示普攻范围圈（跟随角色，空心）
                     if (indicatorManager != null)
                     {
+
                         Vector3 center = GetGroundPosition(transform.position);
-                        if (skillRangeIndicator == null)
+                        if (attackRangeIndicator == null)
                         {
-                            skillRangeIndicator = indicatorManager.CreateCircleIndicator(
+                            //Debug.Log("显示普攻范围圈");
+                            attackRangeIndicator = indicatorManager.CreateCircleIndicator(
                             center,
                             meleeRange,
                             true,
@@ -268,21 +281,15 @@ public class PlayerController : BattleUnitController
                         }
                         else
                         {
-                            indicatorManager.UpdateCircleIndicator(skillRangeIndicator, center, meleeRange, true);
+                            indicatorManager.UpdateCircleIndicator(attackRangeIndicator, center, meleeRange, true);
                         }
                     }
                 }
                 else
                 {
-                    // hide any preview markers when not on Attack
-                    if (indicatorManager != null)
-                    {
-                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
-                        // 同时清理普攻/技能范围圈
-                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
-                        skillRangeIndicator = null;
-                    }
+                    indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
                 }
+
 
                 // If hovering Skill and we have a skill list, populate and show skills
                 if (slc != null && battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Skill)
@@ -299,28 +306,14 @@ public class PlayerController : BattleUnitController
                     slc.Show();
 
                     int currIdx = slc.GetSelectedIndex();
+                    if (currIdx != prevShownSkillIndex)
+                    {
+                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
+                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillRange);
+                    }
                     ShowSkillPreview(currIdx);
                     // update following skill range circle around player
-                    float castRange = GetSkillCastRange(currIdx);
-                    if (indicatorManager != null)
-                    {
-                        Vector3 center = GetGroundPosition(transform.position);
-                        if (skillRangeIndicator == null)
-                        {
-                            skillRangeIndicator = indicatorManager.CreateCircleIndicator(
-                            center,
-                            castRange,
-                            true,
-                            true,
-                            BattleIndicatorManager.Tags.AttackRange,
-                            true
-                            );
-                        }
-                        else
-                        {
-                            indicatorManager.UpdateCircleIndicator(skillRangeIndicator, center, castRange, true);
-                        }
-                    }
+
                     prevShownSkillIndex = currIdx;
                 }
                 else if (slc != null)
@@ -332,8 +325,9 @@ public class PlayerController : BattleUnitController
                     if (indicatorManager != null)
                     {
                         indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
+                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillRange);
                         // clear skill range circle when not in Skill menu
-                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
+                        //indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
                         skillRangeIndicator = null;
                     }
                 }
@@ -347,6 +341,8 @@ public class PlayerController : BattleUnitController
                         if (preselectedTarget != null)
                         {
                             selectedAction = BattleCanvasController.BattleActionType.Attack;
+                            yield return ExecuteAttack();
+                            //sfxPlayer.Play("cut");
                             selectedTarget = preselectedTarget;
                             actionConfirmed = true;
                         }
@@ -362,21 +358,14 @@ public class PlayerController : BattleUnitController
                         int idx = (slc != null) ? slc.GetSelectedIndex() : -1;
                         // 在尝试前重置重选标志，由技能在失败时设置
                         skillReselectRequested = false;
-                        if (idx >= 0 && TryQuickCastSkill(idx))
+                        yield return TryQuickCastSkill(idx);
+                        if(skillReselectRequested == false)
                         {
-                            selectedAction = BattleCanvasController.BattleActionType.Skill;
-                            skillQuickCasted = true;
-                            skillReselectRequested = false;
                             actionConfirmed = true;
-                            if (slc != null) slc.Hide();
-                        }
-                        else
-                        {
-                            // 保持在技能选择界面（重选）；错误提示由具体技能在 TryQuickCastSkill 内部处理
                         }
                     }
                 }
-
+                prevChoice = battleUI.Choice;
                 yield return null;
             }
 
@@ -385,42 +374,12 @@ public class PlayerController : BattleUnitController
             if (indicatorManager != null)
             {
                 indicatorManager.ClearTargetMarkers();
-                indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
+                indicatorManager.ClearAll();
                 skillRangeIndicator = null;
+                attackRangeIndicator = null;
             }
 
-            // 隐藏UI
-            if (battleUI != null)
-                battleUI.HideUI();
 
-            // 根据选择的行动类型执行
-            switch (selectedAction)
-            {
-                case BattleCanvasController.BattleActionType.Attack:
-                    yield return ExecuteAttack();
-                    break;
-                case BattleCanvasController.BattleActionType.Skill:
-                    if (!skillQuickCasted)
-                    {
-                        // fallback for controllers that don't implement quick cast
-                        yield return ExecuteSkill();
-                    }
-                    break;
-            }
-
-            // 如果技能执行失败请求重选，则回到选择循环（保持UI可再次显示）
-            if (selectedAction == BattleCanvasController.BattleActionType.Skill && skillReselectRequested)
-            {
-                skillReselectRequested = false;
-                if (indicatorManager != null)
-                {
-                    indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
-                    indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
-                }
-                //继续外层 while(true) 显示UI等
-                continue;
-            }
-            // 行动成功或非技能：隐藏UI并结束循环
             if (battleUI != null) battleUI.HideUI();
             // 否则退出循环，结束回合
             break;
@@ -490,33 +449,33 @@ public class PlayerController : BattleUnitController
         if (Input.GetKey(KeyCode.D)) h += 1f;
         if (Input.GetKey(KeyCode.A)) h -= 1f;
 
-        Vector3 moveInput = new Vector3(h,0f, v);
-        bool inputMoving = Mathf.Abs(h) >0.001f || Mathf.Abs(v) >0.001f;
+        Vector3 moveInput = new Vector3(h, 0f, v);
+        bool inputMoving = Mathf.Abs(h) > 0.001f || Mathf.Abs(v) > 0.001f;
 
         // Convert input to camera-relative direction on XZ plane
         if (inputMoving)
         {
-        Camera cam = null;
-        if (cameraController != null && cameraController.gameObject != null)
-        {
-            cam = Camera.main; // prefer main camera
-        }
-        if (cam == null) cam = Camera.main;
-        if (cam != null)
-        {
-            Vector3 camForward = cam.transform.forward; camForward.y =0f; camForward.Normalize();
-            Vector3 camRight = cam.transform.right; camRight.y =0f; camRight.Normalize();
-            Vector3 camMove = camRight * moveInput.x + camForward * moveInput.z;
-            moveInput = camMove.sqrMagnitude >0.0001f ? camMove.normalized : Vector3.zero;
+            Camera cam = null;
+            if (cameraController != null && cameraController.gameObject != null)
+            {
+                cam = Camera.main; // prefer main camera
+            }
+            if (cam == null) cam = Camera.main;
+            if (cam != null)
+            {
+                Vector3 camForward = cam.transform.forward; camForward.y = 0f; camForward.Normalize();
+                Vector3 camRight = cam.transform.right; camRight.y = 0f; camRight.Normalize();
+                Vector3 camMove = camRight * moveInput.x + camForward * moveInput.z;
+                moveInput = camMove.sqrMagnitude > 0.0001f ? camMove.normalized : Vector3.zero;
+            }
+            else
+            {
+                moveInput = moveInput.normalized;
+            }
         }
         else
         {
-            moveInput = moveInput.normalized;
-        }
-        }
-        else
-        {
-        moveInput = Vector3.zero;
+            moveInput = Vector3.zero;
         }
 
         // Apply movement (only if will remain within moveRange)
@@ -532,8 +491,8 @@ public class PlayerController : BattleUnitController
 
         // Compute actual planar speed from displacement this frame
         Vector3 delta = transform.position - prevPos;
-        float actualPlanarSpeed = new Vector3(delta.x,0f, delta.z).magnitude / Mathf.Max(Time.deltaTime,0.0001f);
-        bool actuallyMoving = actualPlanarSpeed >0.05f;
+        float actualPlanarSpeed = new Vector3(delta.x, 0f, delta.z).magnitude / Mathf.Max(Time.deltaTime, 0.0001f);
+        bool actuallyMoving = actualPlanarSpeed > 0.05f;
 
         // Footsteps based on actual movement
         if (actuallyMoving && !isMoving)
@@ -550,8 +509,8 @@ public class PlayerController : BattleUnitController
         // Face camera-relative input direction while there is input (WASD relative to camera)
         if (faceMoveDirection && inputMoving)
         {
-            Vector3 faceDir = new Vector3(moveInput.x,0f, moveInput.z);
-            if (faceDir.sqrMagnitude >0.0001f)
+            Vector3 faceDir = new Vector3(moveInput.x, 0f, moveInput.z);
+            if (faceDir.sqrMagnitude > 0.0001f)
             {
                 Transform rotT = visualRoot != null ? visualRoot : transform;
                 Quaternion targetRot = Quaternion.LookRotation(faceDir.normalized, Vector3.up);
@@ -563,7 +522,7 @@ public class PlayerController : BattleUnitController
         if (cachedAnimator != null)
         {
             float speedValue = normalizeAnimatorSpeed ? (actualPlanarSpeed / Mathf.Max(0.0001f, moveSpeed)) : actualPlanarSpeed;
-            if (!actuallyMoving) speedValue =0f;
+            if (!actuallyMoving) speedValue = 0f;
 
             if (animHasSpeedParam && !string.IsNullOrEmpty(animatorSpeedParam))
             {
@@ -571,17 +530,17 @@ public class PlayerController : BattleUnitController
             }
 
             // Direction/Turn relative to current forward and desired (camera-relative) input
-            Vector3 desired = new Vector3(moveInput.x,0f, moveInput.z);
+            Vector3 desired = new Vector3(moveInput.x, 0f, moveInput.z);
             Transform rotT = visualRoot != null ? visualRoot : transform;
-            Vector3 curFwd = rotT.forward; curFwd.y =0f; if (curFwd.sqrMagnitude >0f) curFwd.Normalize();
+            Vector3 curFwd = rotT.forward; curFwd.y = 0f; if (curFwd.sqrMagnitude > 0f) curFwd.Normalize();
 
             if (animHasDirectionParam && !string.IsNullOrEmpty(animatorDirectionParam))
             {
-                float dirVal =0f;
-                if (inputMoving && desired.sqrMagnitude >0.0001f && curFwd.sqrMagnitude >0.0001f)
+                float dirVal = 0f;
+                if (inputMoving && desired.sqrMagnitude > 0.0001f && curFwd.sqrMagnitude > 0.0001f)
                 {
                     float ang = Vector3.SignedAngle(curFwd, desired.normalized, Vector3.up);
-                    dirVal = Mathf.Clamp(ang /120f, -1f,1f);
+                    dirVal = Mathf.Clamp(ang / 120f, -1f, 1f);
                 }
                 cachedAnimator.SetFloat(animatorDirectionParam, dirVal);
             }
@@ -599,11 +558,11 @@ public class PlayerController : BattleUnitController
 
             if (animHasTurnParam && !string.IsNullOrEmpty(animatorTurnParam))
             {
-                float turn =0f;
-                if (inputMoving && desired.sqrMagnitude >0.0001f && curFwd.sqrMagnitude >0.0001f)
+                float turn = 0f;
+                if (inputMoving && desired.sqrMagnitude > 0.0001f && curFwd.sqrMagnitude > 0.0001f)
                 {
                     float ang = Vector3.SignedAngle(curFwd, desired.normalized, Vector3.up);
-                    turn = Mathf.Clamp(ang /180f, -1f,1f);
+                    turn = Mathf.Clamp(ang / 180f, -1f, 1f);
                 }
                 cachedAnimator.SetFloat(animatorTurnParam, turn);
             }
@@ -626,6 +585,7 @@ public class PlayerController : BattleUnitController
         {
             Debug.Log($"攻击目标(预选): {preselectedTarget.unitName}");
             skillSystem.CauseDamage(preselectedTarget, unit, unit.battleAtk, DamageType.Physics);
+            sfxPlayer.Play("cut");
             // grant battle points on successful normal attack (same as non-preselected path)
             var tmQuick = FindObjectOfType<BattleTurnManager>();
             if (tmQuick != null)
@@ -722,9 +682,10 @@ public class PlayerController : BattleUnitController
 
     // Try to execute selected skill immediately on single click in Skill mode.
     // Return true if executed (turn will proceed), false to keep selecting (e.g., no target or resource insufficient).
-    protected virtual bool TryQuickCastSkill(int index)
+    protected virtual IEnumerator TryQuickCastSkill(int index)
     {
-        return false;
+        //return false;
+        yield return null;
     }
 
     // helper to test if a unit is a valid target

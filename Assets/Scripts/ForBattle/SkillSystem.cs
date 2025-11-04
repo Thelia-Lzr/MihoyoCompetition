@@ -39,6 +39,7 @@ namespace Assets.Scripts.ForBattle
         public void CauseDamage(BattleUnit unit, BattleUnit source, int damage, DamageType damageType)
         {
             if (unit == null || source == null) return;
+
             if (unit.causality > 0)
             {
                 unit.causality = Mathf.Max(0, unit.causality - 1);
@@ -49,7 +50,7 @@ namespace Assets.Scripts.ForBattle
 
             int criIndex;
             criIndex = UnityEngine.Random.Range(0, 100);
-            int lastSpdDef =  Mathf.FloorToInt(unit.battleSpdDef * (1-source.battleCri * .01f));
+            int lastSpdDef =  Mathf.FloorToInt(unit.battleEvasion * (1-source.battleCri * .01f));
             // 先用 float 计算，再四舍五入为 int，避免隐式转换错误
             float rawDamage = 0f;
 
@@ -307,7 +308,7 @@ namespace Assets.Scripts.ForBattle
             }
 
             // 递减持续时间并在到期时回退增益/减益
-            TickAndRestore(ref u.buffTurns_EvasionUp, ref u.deltaSpdDef, ref u.battleSpdDef);
+            TickAndRestore(ref u.buffTurns_EvasionUp, ref u.deltaSpdDef, ref u.battleEvasion);
             TickAndRestore(ref u.buffTurns_CritUp,   ref u.deltaCri,   ref u.battleCri);
             TickAndRestore(ref u.buffTurns_DefUp,    ref u.deltaDef,   ref u.battleDef);
             TickAndRestore(ref u.buffTurns_AttackUp, ref u.deltaAtk,   ref u.battleAtk);

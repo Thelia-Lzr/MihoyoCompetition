@@ -20,6 +20,15 @@ namespace Assets.Scripts.ForBattle.Indicators
         public Color invalidColor = new Color(1f, 0f, 0f, 0.3f);
         public Color targetColor = Color.red;
 
+        [System.Serializable]
+        public struct IndicatorColorEntry
+        {
+            public string name;
+            public Color color;
+        }
+
+        public IndicatorColorEntry[] colors;
+
         [Header("Debug")]
         public bool debugShowIndicatorMarker = false;
 
@@ -28,6 +37,7 @@ namespace Assets.Scripts.ForBattle.Indicators
         {
             public const string MovementRange = "MovementRange";
             public const string AttackRange = "AttackRange";
+            public const string SkillRange = "SkillRange";
             public const string SkillPreview = "SkillPreview";
             public const string AreaSelection = "AreaSelection";
             public const string DirectionSelection = "DirectionSelection";
@@ -40,6 +50,69 @@ namespace Assets.Scripts.ForBattle.Indicators
         private List<GameObject> allIndicators = new List<GameObject>();
         private List<GameObject> debugMarkers = new List<GameObject>();
 
+        //颜色表（name -> Color）
+        private Dictionary<string, Color> colorMap = new Dictionary<string, Color>();
+
+        private void Awake()
+        {
+            RebuildColorMap();
+        }
+
+        /// <summary>
+        ///重新构建颜色表，运行时可调用以刷新 Inspector 中的配置。
+        /// </summary>
+        public void RebuildColorMap()
+        {
+            colorMap.Clear();
+            if (colors == null) return;
+            for (int i =0; i < colors.Length; i++)
+            {
+                var entry = colors[i];
+                if (!string.IsNullOrEmpty(entry.name))
+                {
+                    colorMap[entry.name] = entry.color;
+                }
+            }
+        }
+
+        private Color ResolveColor(string colorKey, Color fallback)
+        {
+            if (!string.IsNullOrEmpty(colorKey) && colorMap.TryGetValue(colorKey, out var c))
+            {
+                return c;
+            }
+            return fallback;
+        }
+
+        private void ApplyColorToIndicator(GameObject indicator, Color color)
+        {
+            if (indicator == null) return;
+
+            // 应用于所有 LineRenderer
+            var lineRenderers = indicator.GetComponentsInChildren<LineRenderer>(true);
+            if (lineRenderers != null && lineRenderers.Length >0)
+            {
+                foreach (var lr in lineRenderers)
+                {
+                    lr.startColor = color;
+                    lr.endColor = color;
+                }
+            }
+
+            // 应用于所有 Renderer 的 material.color
+            var renderers = indicator.GetComponentsInChildren<Renderer>(true);
+            if (renderers != null && renderers.Length >0)
+            {
+                foreach (var rend in renderers)
+                {
+                    if (rend.material != null)
+                    {
+                        rend.material.color = color;
+                    }
+                }
+            }
+        }
+
         // ===== 创建方法（带标签） =====
 
         /// <summary>
@@ -47,7 +120,8 @@ namespace Assets.Scripts.ForBattle.Indicators
         /// </summary>
         /// <param name="tag">指示器标签，用于分组管理。相同标签的指示器可以一起清理</param>
         /// <param name="clearSameTag">是否自动清理相同标签的旧指示器</param>
-        public GameObject CreateSectorIndicator(Transform center, float radius, float angle, string tag = "", bool clearSameTag = false)
+        /// <param name="colorKey">颜色表键名（可选）。若提供，将覆盖默认颜色</param>
+        public GameObject CreateSectorIndicator(Transform center, float radius, float angle, string tag = "", bool clearSameTag = false, string colorKey = null)
         {
             if (clearSameTag && !string.IsNullOrEmpty(tag))
             {
@@ -58,7 +132,7 @@ namespace Assets.Scripts.ForBattle.Indicators
             if (sectorIndicatorPrefab != null)
             {
                 indicator = Instantiate(sectorIndicatorPrefab, center.position, Quaternion.identity);
-                indicator.transform.localScale = new Vector3(radius * 2f, 1f, radius * 2f);
+                indicator.transform.localScale = new Vector3(radius *2f, 1f, radius *2f);
             }
             else
             {
@@ -67,9 +141,13 @@ namespace Assets.Scripts.ForBattle.Indicators
 
             if (indicator != null)
             {
-                indicator.transform.position = center.position + Vector3.up * 0.01f;
+                indicator.transform.position = center.position + Vector3.up *0.01f;
                 indicator.transform.SetParent(this.transform, true);
                 indicator.name = string.IsNullOrEmpty(tag) ? "SectorIndicator" : $"SectorIndicator_{tag}";
+
+                //颜色：若提供 colorKey，覆盖默认 validColor
+                var col = ResolveColor(colorKey, validColor);
+                ApplyColorToIndicator(indicator, col);
 
                 TrackIndicator(indicator, tag);
             }
@@ -83,7 +161,8 @@ namespace Assets.Scripts.ForBattle.Indicators
         /// </summary>
         /// <param name="tag">指示器标签</param>
         /// <param name="clearSameTag">是否自动清理相同标签的旧指示器</param>
-        public GameObject CreateCircleIndicator(Vector3 worldPos, float radius, bool isValid = true, bool hollow = false, string tag = "", bool clearSameTag = false)
+        /// <param name="colorKey">颜色表键名（可选）。若提供，将覆盖默认颜色（会根据 isValid 与 invalidColor/validColor 二选一作为回退）</param>
+        public GameObject CreateCircleIndicator(Vector3 worldPos, float radius, bool isValid = true, bool hollow = false, string tag = "", bool clearSameTag = false, string colorKey = null)
         {
             if (clearSameTag && !string.IsNullOrEmpty(tag))
             {
@@ -93,14 +172,14 @@ namespace Assets.Scripts.ForBattle.Indicators
             GameObject indicator;
             if (hollow)
             {
-                int segments = 64;
+                int segments =64;
                 GameObject go = new GameObject(string.IsNullOrEmpty(tag) ? "HollowCircleIndicator" : $"HollowCircle_{tag}");
-                go.transform.position = worldPos + Vector3.up * 0.01f;
+                go.transform.position = worldPos + Vector3.up *0.01f;
                 var lr = go.AddComponent<LineRenderer>();
                 lr.useWorldSpace = true;
                 lr.loop = true;
                 lr.positionCount = segments;
-                lr.widthMultiplier = 0.05f;
+                lr.widthMultiplier =0.05f;
                 lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 lr.receiveShadows = false;
                 if (indicatorMaterial != null)
@@ -111,14 +190,15 @@ namespace Assets.Scripts.ForBattle.Indicators
                 {
                     lr.material = new Material(Shader.Find("Sprites/Default"));
                 }
-                Color col = isValid ? validColor : invalidColor;
+                Color fallback = isValid ? validColor : invalidColor;
+                Color col = ResolveColor(colorKey, fallback);
                 lr.startColor = col;
                 lr.endColor = col;
-                for (int i = 0; i < segments; i++)
+                for (int i =0; i < segments; i++)
                 {
-                    float angle = (float)i / segments * Mathf.PI * 2f;
-                    Vector3 p = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                    lr.SetPosition(i, worldPos + p + Vector3.up * 0.01f);
+                    float angle = (float)i / segments * Mathf.PI *2f;
+                    Vector3 p = new Vector3(Mathf.Cos(angle) * radius,0f, Mathf.Sin(angle) * radius);
+                    lr.SetPosition(i, worldPos + p + Vector3.up *0.01f);
                 }
                 indicator = go;
             }
@@ -127,7 +207,7 @@ namespace Assets.Scripts.ForBattle.Indicators
                 if (circleIndicatorPrefab != null)
                 {
                     indicator = Instantiate(circleIndicatorPrefab, worldPos, Quaternion.identity);
-                    indicator.transform.localScale = new Vector3(radius * 2f, 0.1f, radius * 2f);
+                    indicator.transform.localScale = new Vector3(radius *2f, 0.1f, radius *2f);
                 }
                 else
                 {
@@ -147,7 +227,15 @@ namespace Assets.Scripts.ForBattle.Indicators
             }
 
             indicator.transform.SetParent(this.transform, true);
-            indicator.transform.position = worldPos + Vector3.up * 0.02f;
+            indicator.transform.position = worldPos + Vector3.up *0.02f;
+
+            // 对非空心情况应用颜色
+            if (!hollow)
+            {
+                Color fallback = isValid ? validColor : invalidColor;
+                Color col = ResolveColor(colorKey, fallback);
+                ApplyColorToIndicator(indicator, col);
+            }
 
             TrackIndicator(indicator, tag);
 
@@ -159,7 +247,8 @@ namespace Assets.Scripts.ForBattle.Indicators
         /// 创建目标标记
         /// </summary>
         /// <param name="clearPrevious">是否清除之前的目标标记（默认true，保持单选行为）</param>
-        public GameObject CreateTargetMarker(Transform target, bool clearPrevious = true)
+        /// <param name="colorKey">颜色表键名（可选）。若提供，将覆盖默认 targetColor</param>
+        public GameObject CreateTargetMarker(Transform target, bool clearPrevious = true, string colorKey = null)
         {
             if (clearPrevious)
             {
@@ -169,15 +258,19 @@ namespace Assets.Scripts.ForBattle.Indicators
             GameObject marker;
             if (targetMarkerPrefab != null)
             {
-                marker = Instantiate(targetMarkerPrefab, target.position + Vector3.up * 0.1f, Quaternion.identity);
+                marker = Instantiate(targetMarkerPrefab, target.position + Vector3.up *0.1f, Quaternion.identity);
             }
             else
             {
-                marker = CreateTargetMarkerMesh(target.position + Vector3.up * 0.1f);
+                marker = CreateTargetMarkerMesh(target.position + Vector3.up *0.1f);
             }
 
             marker.transform.SetParent(target);
             marker.name = "TargetMarker";
+
+            // 应用颜色
+            var tCol = ResolveColor(colorKey, targetColor);
+            ApplyColorToIndicator(marker, tCol);
 
             TrackIndicator(marker, Tags.TargetMarker);
 
@@ -188,17 +281,17 @@ namespace Assets.Scripts.ForBattle.Indicators
 
         public GameObject CreateSectorIndicator(Transform center, float radius, float angle)
         {
-            return CreateSectorIndicator(center, radius, angle, Tags.None, false);
+            return CreateSectorIndicator(center, radius, angle, Tags.None, false, null);
         }
 
         public GameObject CreateCircleIndicator(Vector3 worldPos, float radius, bool isValid = true, bool hollow = false)
         {
-            return CreateCircleIndicator(worldPos, radius, isValid, hollow, Tags.None, false);
+            return CreateCircleIndicator(worldPos, radius, isValid, hollow, Tags.None, false, null);
         }
 
         public GameObject CreateTargetMarker(Transform target)
         {
-            return CreateTargetMarker(target, true);
+            return CreateTargetMarker(target, true, null);
         }
 
         // ===== 更新方法 =====
@@ -206,7 +299,7 @@ namespace Assets.Scripts.ForBattle.Indicators
         public void UpdateSectorRotation(GameObject indicator, Transform center, Vector3 forward)
         {
             if (indicator == null) return;
-            indicator.transform.position = center.position + Vector3.up * 0.01f;
+            indicator.transform.position = center.position + Vector3.up *0.01f;
             indicator.transform.rotation = Quaternion.LookRotation(forward);
         }
 
@@ -214,31 +307,31 @@ namespace Assets.Scripts.ForBattle.Indicators
         {
             if (indicator == null) return;
 
-            indicator.transform.position = center + Vector3.up * 0.01f;
-            indicator.transform.localScale = new Vector3(radius * 2f, 1f, radius * 2f);
+            indicator.transform.position = center + Vector3.up *0.01f;
+            indicator.transform.localScale = new Vector3(radius *2f, 1f, radius *2f);
 
             var mf = indicator.GetComponent<MeshFilter>();
             if (mf != null)
             {
                 Mesh mesh = new Mesh();
-                int segments = 32;
+                int segments =32;
                 float angleRad = angle * Mathf.Deg2Rad;
-                float halfAngle = angleRad / 2f;
+                float halfAngle = angleRad /2f;
 
-                Vector3[] vertices = new Vector3[segments + 2];
-                int[] triangles = new int[segments * 3];
+                Vector3[] vertices = new Vector3[segments +2];
+                int[] triangles = new int[segments *3];
                 vertices[0] = Vector3.zero;
 
-                for (int i = 0; i <= segments; i++)
+                for (int i =0; i <= segments; i++)
                 {
                     float currentAngle = -halfAngle + (angleRad * i / segments);
-                    vertices[i + 1] = new Vector3(Mathf.Sin(currentAngle) * radius, 0f, Mathf.Cos(currentAngle) * radius);
+                    vertices[i +1] = new Vector3(Mathf.Sin(currentAngle) * radius,0f, Mathf.Cos(currentAngle) * radius);
 
                     if (i < segments)
                     {
-                        triangles[i * 3] = 0;
-                        triangles[i * 3 + 1] = i + 1;
-                        triangles[i * 3 + 2] = i + 2;
+                        triangles[i *3] =0;
+                        triangles[i *3 +1] = i +1;
+                        triangles[i *3 +2] = i +2;
                     }
                 }
 
@@ -257,13 +350,13 @@ namespace Assets.Scripts.ForBattle.Indicators
             var lr = indicator.GetComponent<LineRenderer>();
             if (lr != null)
             {
-                indicator.transform.position = worldPos + Vector3.up * 0.01f;
+                indicator.transform.position = worldPos + Vector3.up *0.01f;
                 int segments = lr.positionCount;
-                for (int i = 0; i < segments; i++)
+                for (int i =0; i < segments; i++)
                 {
-                    float angle = (float)i / segments * Mathf.PI * 2f;
-                    Vector3 p = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                    lr.SetPosition(i, worldPos + p + Vector3.up * 0.01f);
+                    float angle = (float)i / segments * Mathf.PI *2f;
+                    Vector3 p = new Vector3(Mathf.Cos(angle) * radius,0f, Mathf.Sin(angle) * radius);
+                    lr.SetPosition(i, worldPos + p + Vector3.up *0.01f);
                 }
                 Color col = isValid ? validColor : invalidColor;
                 lr.startColor = col;
@@ -271,8 +364,8 @@ namespace Assets.Scripts.ForBattle.Indicators
             }
             else
             {
-                indicator.transform.position = worldPos + Vector3.up * 0.02f;
-                indicator.transform.localScale = new Vector3(radius * 2f, 0.01f, radius * 2f);
+                indicator.transform.position = worldPos + Vector3.up *0.02f;
+                indicator.transform.localScale = new Vector3(radius *2f, 0.01f, radius *2f);
 
                 var rend = indicator.GetComponent<Renderer>();
                 if (rend != null && rend.material != null)
@@ -285,7 +378,7 @@ namespace Assets.Scripts.ForBattle.Indicators
         public void UpdateTargetMarker(GameObject marker, Vector3 position)
         {
             if (marker == null) return;
-            marker.transform.position = position + Vector3.up * 0.1f;
+            marker.transform.position = position + Vector3.up *0.1f;
         }
 
         public void UpdateTargetMarkerColor(GameObject marker, Color color)
@@ -326,7 +419,7 @@ namespace Assets.Scripts.ForBattle.Indicators
 
             if (taggedIndicators.TryGetValue(tag, out List<GameObject> indicators))
             {
-                // 复制列表避免在迭代时修改
+                //复制列表避免在迭代时修改
                 var indicatorsCopy = new List<GameObject>(indicators);
                 foreach (var indicator in indicatorsCopy)
                 {
@@ -441,24 +534,24 @@ namespace Assets.Scripts.ForBattle.Indicators
             MeshRenderer mr = go.AddComponent<MeshRenderer>();
 
             Mesh mesh = new Mesh();
-            int segments = 32;
+            int segments =32;
             float angleRad = angle * Mathf.Deg2Rad;
-            float halfAngle = angleRad / 2f;
+            float halfAngle = angleRad /2f;
 
-            Vector3[] vertices = new Vector3[segments + 2];
-            int[] triangles = new int[segments * 3];
+            Vector3[] vertices = new Vector3[segments +2];
+            int[] triangles = new int[segments *3];
             vertices[0] = Vector3.zero;
 
-            for (int i = 0; i <= segments; i++)
+            for (int i =0; i <= segments; i++)
             {
                 float currentAngle = -halfAngle + (angleRad * i / segments);
-                vertices[i + 1] = new Vector3(Mathf.Sin(currentAngle) * radius, 0f, Mathf.Cos(currentAngle) * radius);
+                vertices[i +1] = new Vector3(Mathf.Sin(currentAngle) * radius,0f, Mathf.Cos(currentAngle) * radius);
 
                 if (i < segments)
                 {
-                    triangles[i * 3] = 0;
-                    triangles[i * 3 + 1] = i + 1;
-                    triangles[i * 3 + 2] = i + 2;
+                    triangles[i *3] =0;
+                    triangles[i *3 +1] = i +1;
+                    triangles[i *3 +2] = i +2;
                 }
             }
 
@@ -492,8 +585,8 @@ namespace Assets.Scripts.ForBattle.Indicators
             go.name = "CircleIndicator";
             go.transform.position = center;
 
-            float height = 0.01f;
-            go.transform.localScale = new Vector3(radius * 2f, height, radius * 2f);
+            float height =0.01f;
+            go.transform.localScale = new Vector3(radius *2f, height, radius *2f);
 
             var col = go.GetComponent<Collider>();
             if (col != null) Destroy(col);
@@ -516,8 +609,8 @@ namespace Assets.Scripts.ForBattle.Indicators
                 mr.material.color = c;
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 mr.receiveShadows = false;
-                mr.material.renderQueue = 3000;
-                if (mr.material.HasProperty("_ZWrite")) mr.material.SetInt("_ZWrite", 0);
+                mr.material.renderQueue =3000;
+                if (mr.material.HasProperty("_ZWrite")) mr.material.SetInt("_ZWrite",0);
                 mr.enabled = true;
             }
 
@@ -529,7 +622,7 @@ namespace Assets.Scripts.ForBattle.Indicators
             GameObject go = new GameObject("TargetMarker");
             go.transform.position = position;
 
-            for (int ring = 0; ring < 2; ring++)
+            for (int ring =0; ring <2; ring++)
             {
                 GameObject ringObj = new GameObject($"Ring{ring}");
                 ringObj.transform.SetParent(go.transform);
@@ -538,17 +631,17 @@ namespace Assets.Scripts.ForBattle.Indicators
                 LineRenderer lr = ringObj.AddComponent<LineRenderer>();
                 lr.useWorldSpace = false;
                 lr.loop = true;
-                lr.widthMultiplier = 0.05f + ring * 0.02f;
+                lr.widthMultiplier =0.05f + ring *0.02f;
                 lr.material = new Material(Shader.Find("Sprites/Default"));
                 lr.startColor = targetColor;
                 lr.endColor = targetColor;
-                lr.positionCount = 32;
+                lr.positionCount =32;
 
-                float radius = 0.5f + ring * 0.1f;
-                for (int i = 0; i < 32; i++)
+                float radius =0.5f + ring *0.1f;
+                for (int i =0; i <32; i++)
                 {
-                    float angle = (float)i / 32f * Mathf.PI * 2f;
-                    lr.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius));
+                    float angle = (float)i /32f * Mathf.PI *2f;
+                    lr.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius,0f, Mathf.Sin(angle) * radius));
                 }
             }
 
@@ -559,8 +652,8 @@ namespace Assets.Scripts.ForBattle.Indicators
         {
             GameObject s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             s.name = "DEBUG_IndicatorMarker";
-            s.transform.position = pos + Vector3.up * 0.2f;
-            s.transform.localScale = Vector3.one * 0.2f;
+            s.transform.position = pos + Vector3.up *0.2f;
+            s.transform.localScale = Vector3.one *0.2f;
             var rend = s.GetComponent<MeshRenderer>();
             if (rend != null)
             {

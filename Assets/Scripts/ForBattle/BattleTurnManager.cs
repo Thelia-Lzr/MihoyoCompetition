@@ -75,6 +75,8 @@ public class BattleTurnManager : MonoBehaviour
 
         // 初始化战技点显示
         UpdateBattlePointsUI();
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
     /// <summary>
@@ -89,6 +91,11 @@ public class BattleTurnManager : MonoBehaviour
         var units = turnOrder.GetAll();
         foreach (var u in units)
         {
+            if(u.battleHp <= 0)
+            {
+                u.EndBattle();
+                turnOrder.Remove(u);
+            }
             if (u == null) continue;
             int perTick = Mathf.Max(1, Mathf.RoundToInt(u.battleSpd * tickInterval));
             if (u.battleActPoint >= actionPointThreshold)

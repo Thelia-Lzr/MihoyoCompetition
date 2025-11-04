@@ -1,3 +1,6 @@
+using Assets.Scripts.ForBattle;
+using Assets.Scripts.ForBattle.Indicators;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -11,6 +14,8 @@ public class BattleUnit : MonoBehaviour
 {
     public BattleUnitType unitType;
     public BattleUnitController thisController;
+    public SkillSystem skillSystem;
+    public BattleIndicatorManager indicatorManager;
 
     [Header("基础属性")]
     [Tooltip("单位名称")]
@@ -38,7 +43,7 @@ public class BattleUnit : MonoBehaviour
     public int spd;
 
     [Tooltip("单位闪避")]
-    public int spdDef;
+    public int evasion;
 
     [Tooltip("单位会心")]
     public int cri;
@@ -67,7 +72,7 @@ public class BattleUnit : MonoBehaviour
     public int battleSpd;
 
     [Tooltip("单位闪避")]
-    public int battleSpdDef;
+    public int battleEvasion;
 
     [Tooltip("单位会心")]
     public int battleCri;
@@ -79,6 +84,18 @@ public class BattleUnit : MonoBehaviour
     public int causality;
     public int invisible;
     public int shield;
+
+    public int faytUpAtk;
+
+    public int faytDownDef;
+
+    public int luminaUpCri;
+    public int luminaUpEvation;
+    public int luminaUpDef;
+    public int luninaUpHp;
+
+    public int luminaDownMagicDef;
+    public int luminaDownMagicAtk;
 
 
 
@@ -123,12 +140,13 @@ public class BattleUnit : MonoBehaviour
         battleMaxHp = maxhp;
         battleHp = hp;
         battleAtk = atk;
+        battleMagicAtk = magicAtk;
         battleDef = def;
         battleMagicDef = magicDef;
         battleSpd = spd;
         battleCri = cri;
-        battleSpdDef = spdDef;
-        battleActPoint =0;
+        battleEvasion = evasion;
+        battleActPoint = 0;
 
         // Try to get a controller component on the same GameObject and bind
         if (controller == null)
@@ -141,15 +159,64 @@ public class BattleUnit : MonoBehaviour
         }
     }
 
+    public void Flush()
+    {
+        battleAtk = atk;
+        battleMagicAtk = magicAtk;
+        battleDef = def;
+        battleMagicDef = magicDef;
+        battleSpd = spd;
+        battleCri = cri;
+        battleEvasion = evasion;
+        if (invisible > 0)
+        {
+            invisible -= 1;
+        }
+        if (faytUpAtk > 0)
+        {
+            faytUpAtk -= 1;
+            battleAtk += Mathf.RoundToInt(atk * .2f);
+        }
+        if (faytDownDef > 0)
+        {
+            faytDownDef -= 1;
+            battleDef -= Mathf.RoundToInt(def * .3f);
+        }
+        if (luminaUpCri > 0)
+        {
+            luminaUpCri -= 1;
+            battleCri += 15;
+        }
+        if (luminaUpEvation > 0)
+        {
+            luminaUpEvation -= 1;
+            battleEvasion += 15;
+        }
+        if (luminaDownMagicDef > 0)
+        {
+            luminaDownMagicDef -= 1;
+            battleMagicDef -= Mathf.RoundToInt(magicDef * .4f);
+        }
+        if (luminaDownMagicAtk > 0)
+        {
+            luminaDownMagicAtk -= 1;
+            battleMagicAtk -= Mathf.RoundToInt(magicAtk * .4f);
+        }
+    }
+
+    public void EndBattle()
+    {
+        Destroy(this.gameObject);
+    }
     // Start is called before the first frame update
     void Start()
     {
-        
+
     }
 
     // Update is called once per frame
     void Update()
     {
-        battlePos = transform.position;
+        
     }
 }

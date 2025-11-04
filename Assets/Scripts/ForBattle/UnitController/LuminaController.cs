@@ -1,81 +1,88 @@
-using Assets.Scripts.ForBattle;
-using Assets.Scripts.ForBattle.Indicators;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Assets.Scripts.ForBattle;
+using Assets.Scripts.ForBattle.Indicators;
 
 public class LuminaController : PlayerController
 {
     [Header("Lumina Settings")]
-    public float healGroupPower = 0.8f;            // 纯白疗愈：按魔攻倍率回血
-    public float bladePowerCPlus = 1.3f;           // 虚化刃：C+ 约1.3
-    public float bladeSideHealRatio = 0.2f;        // 虚化刃侧面命中，自身按伤害比例回血
-    public int buffTurnsDefault = 3;               // 常规Buff持续回合
-    public int auraTurnsDefault = 4;               // 幻化持续回合
-    public int evasionUpAmount = 20;               // 因果律预测：回避上升
-    public int critUpAmount = 20;                  // 因果律预测：会心上升
-    public int defenseUpAmount = 20;               // 水晶结界：防御上升
-    public float regenRatioPerTurn = 0.05f;        // 水晶结界：每回合按最大生命比例回血
-    public int attackUpAmount = 20;                // 天使赐福：攻击上升
-    public int speedUpAmount = 15;                 // 天使赐福：行动效率（用速度上升模拟）
-    public int magicDefDownAmount = 20;            // 星光射线：魔防下降
-    public int magicAtkDownAmount = 15;            // 星光射线：魔攻下降（命中>=2时）
-    public float starlightLength = 8f;             // 星光射线：长度
-    public float starlightWidth = 1.25f;           // 星光射线：半宽
-    public float spearRadius = 6.0f;               // 羽翼之枪：扇形半径
-    public float spearAngle = 100f;                // 羽翼之枪：扇形角度
-    public float spearPower = 1.2f;                // 羽翼之枪：伤害倍率（魔法）
-    public float spearSelfHealPerTargetRatio = 0.05f; // 羽翼之枪：每命中1目标，自身按最大生命回血比例
+    public float powerCPlus = 1.0f; // 虚化刃 威力C+
+    public float wingLancePower = 1.2f; // 羽翼之枪（光属性，魔法）
+    public float starlightPower = 1.3f; // 星光射线（光属性，魔法）
 
-    private bool isTransformed = false;
-    private int transformTurnsLeft = 0;
+    [Header("BP Costs")]
+    public int costPureHeal = 4; //纯白疗愈
+    public int costPhaseBlade = 2; // 虚化刃
+    public int costCausalityForecast = 4; // 因果律预测
+    public int costCrystalField = 5; // 水晶结界
+    public int costPhantasm = 3; // 幻化
+    public int costEndPhantasm = 0; //结束幻化
+
+    [Header("Durations / Effects")]
+    public int phantasmTurns = 0; // 幻化回合计数。>0 表示幻化中
+    public int angelBlessingTurns = 0; // 天使赐福回合计数（降低BP，攻击上升）
+    public int angelBlessingBPCostReduction = 1; // 每个技能BP减少量（>=0）
+
+    public int teamBuffDuration = 3; // 因果律预测 / 水晶结界 持续回合
+    public float buffAttackUpRate = 0.2f; // 攻击提升20%
+    public float buffDefUpRate = 0.2f; // 防御提升20%
+    public float healRatioOnSideHit = 0.3f; // 虚化刃：侧面命中按伤害比值回血
+    public float regenPercentPerTurn = 0.05f; //结界：每回合回血百分比（最大生命）
+
+    [Header("AOE Settings")]
+    public float wingLanceRadius = 5.5f; // 羽翼之枪 扇形半径
+    public float wingLanceAngle = 90f; // 羽翼之枪 扇形角度
+    public float starlightLength = 10f; // 星光射线半径（改为使用扇形半径）
+    public float starlightAngle = 20f; // 星光射线扇形角度（可调小以模拟直线）
+    public float starlightWidth = 2f; //旧：直线判定宽度（不再使用）
+
+    private readonly List<string> baseSkills = new List<string>
+ {
+ "纯白疗愈",
+ "虚化刃",
+ "因果律预测",
+ "水晶结界",
+ "幻化"
+ };
+
+    private readonly List<string> phantasmSkills = new List<string>
+ {
+ "星光射线",
+ "羽翼之枪",
+ "因果律预测",
+ "天使赐福",
+ "结束幻化"
+ };
 
     protected override List<string> GetSkillNames()
     {
-        if (!isTransformed)
-        {
-            return new List<string> {
-                "纯白疗愈",   // 0  4BP 群体回血
-                "虚化刃",     // 1  2BP 魔法C+ 侧面命中自愈
-                "因果律预测", // 2  4BP 群体回避↑ 会心↑ + 因果律
-                "水晶结界",   // 3  5BP 群体防御↑ + 缓慢再生
-                "幻化"        // 4  3BP 开启光环
-            };
-        }
-        else
-        {
-            return new List<string> {
-                "星光射线",   // 0  4BP 直线贯穿 降魔防；命中≥2再降魔攻
-                "羽翼之枪",   // 1  2BP 大扇形 光魔法 命中数量自愈
-                "因果律预测", // 2  4BP 保留
-                "天使赐福",   // 3  5BP 群体攻击↑ + 行动效率↑
-                "结束幻化"    // 4  0BP 结束光环
-            };
-        }
+        return phantasmTurns > 0 ? phantasmSkills : baseSkills;
     }
 
     protected override string GetSkillExtraInfo(int index)
     {
-        if (!isTransformed)
+        // 显示 BP 消耗与类型简述
+        if (phantasmTurns > 0)
         {
             switch (index)
             {
-                case 0: return "群体治疗 | BP 4";
-                case 1: return "魔法C+ | 侧面命中自愈 | BP 2";
-                case 2: return $"群体回避↑ 会心↑ {buffTurnsDefault}回合 + 因果律 | BP 4";
-                case 3: return $"结界：群体防御↑ + 再生 {buffTurnsDefault}回合 | BP 5";
-                case 4: return $"光环：持续 {auraTurnsDefault} 回合 | BP 3";
+                case 0: return $"魔法 光 威力A x{starlightPower:F2} | BP {GetCostByIndex(index)}"; // 星光射线
+                case 1: return $"魔法 光 扇形 x{wingLancePower:F2} | BP {GetCostByIndex(index)}"; // 羽翼之枪
+                case 2: return $"辅助 群体回避/会心+因果律 | BP {GetCostByIndex(index)}"; // 因果律预测
+                case 3: return $"光环 群体攻击+降消耗 | BP {GetCostByIndex(index)}"; // 天使赐福
+                case 4: return $"辅助结束幻化 | BP {GetCostByIndex(index)}"; //结束幻化
             }
         }
         else
         {
             switch (index)
             {
-                case 0: return $"直线贯穿 光属性 | 降魔防 | BP 4";
-                case 1: return $"大扇形 光属性 | 按命中数自愈 | BP 2";
-                case 2: return $"群体回避↑ 会心↑ {buffTurnsDefault}回合 + 因果律 | BP 4";
-                case 3: return $"群体攻击↑ + 行动效率↑ {buffTurnsDefault}回合 | BP 5";
-                case 4: return "结束幻化 | BP 0";
+                case 0: return $"回复 群体 | BP {GetCostByIndex(index)}"; //纯白疗愈
+                case 1: return $"魔法 威力C+ x{powerCPlus:F2} | BP {GetCostByIndex(index)}"; // 虚化刃
+                case 2: return $"辅助 群体回避/会心+因果律 | BP {GetCostByIndex(index)}"; // 因果律预测
+                case 3: return $"领域 群体防御+缓回 | BP {GetCostByIndex(index)}"; // 水晶结界
+                case 4: return $"光环 幻化(4回合) | BP {GetCostByIndex(index)}"; // 幻化
             }
         }
         return null;
@@ -83,300 +90,156 @@ public class LuminaController : PlayerController
 
     protected override float GetSkillCastRange(int index)
     {
-        // 可按技能不同返回不同半径，这里使用通用显示范围
-        return targetSelectionRange;
-    }
-
-    protected override bool TryQuickCastSkill(int index)
-    {
-        var tm = FindObjectOfType<BattleTurnManager>();
-        if (tm == null) return false;
-
-        // 计算当前技能的消耗
-        int cost = GetBpCost(index);
-        if (!tm.CanSpendBattlePoints(cost)) { sfxPlayer?.Play("Error"); skillReselectRequested = true; return false; }
-
-        bool ok = false;
-        if (!isTransformed)
+        if (phantasmTurns > 0)
         {
             switch (index)
             {
-                case 0: ok = Skill_PureHeal(tm); break;
-                case 1: ok = Skill_PhaseBlade(tm); break;
-                case 2: ok = Skill_CausalityPrediction(tm); break;
-                case 3: ok = Skill_CrystalBarrier(tm); break;
-                case 4: ok = Skill_Transform(tm); break;
+                case 0: // 星光射线 扇形
+                case 1: // 羽翼之枪 扇形
+                case 3: // 天使赐福 群体
+                    return targetSelectionRange;
+                case 2: // 因果律预测
+                    return targetSelectionRange;
+                case 4: //结束幻化 自身
+                    return 0f;
             }
         }
         else
         {
             switch (index)
             {
-                case 0: ok = Skill_StarlightRay(tm); break;
-                case 1: ok = Skill_WingSpear(tm); break;
-                case 2: ok = Skill_CausalityPrediction(tm); break;
-                case 3: ok = Skill_AngelBlessing(tm); break;
-                case 4: ok = Skill_EndTransform(); break;
+                case 0: //纯白疗愈 群体
+                case 2: // 因果律预测
+                case 3: // 水晶结界
+                    return targetSelectionRange;
+                case 1: // 虚化刃近战单体
+                    return meleeRange;
+                case 4: // 幻化 自身
+                    return 0f;
             }
         }
-
-        if (ok)
-        {
-            // 消耗点数（结束幻化为0不消耗）
-            if (cost > 0 && !tm.TrySpendBattlePoints(cost)) { sfxPlayer?.Play("Error"); return false; }
-            return true;
-        }
-        return false;
+        return base.GetSkillCastRange(index);
     }
 
-    private int GetBpCost(int index)
+    protected override void ShowSkillPreview(int index)
     {
-        if (!isTransformed)
+        if (indicatorManager == null) return;
+
+        // 清理并重建预览（同标签）
+        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
+        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillRange);
+
+        float castRange = GetSkillCastRange(index);
+        Vector3 center = GetGroundPosition(transform.position);
+
+        if (phantasmTurns > 0)
         {
             switch (index)
             {
-                case 0: return 4; // 纯白疗愈
-                case 1: return 2; // 虚化刃
-                case 2: return 4; // 因果律预测
-                case 3: return 5; // 水晶结界
-                case 4: return 3; // 幻化
+                case 0: // 星光射线：扇形（小角度模拟直线）
+                    {
+                        var sector = indicatorManager.CreateSectorIndicator(transform, starlightLength, starlightAngle, BattleIndicatorManager.Tags.SkillPreview, true, "Holy");
+                        //取摄像机方向
+                        Camera cam = Camera.main ?? (Camera.allCamerasCount > 0 ? Camera.allCameras[0] : null);
+                        if (cam != null)
+                        {
+                            Vector3 camFwd = cam.transform.forward; camFwd.y = 0f;
+                            if (camFwd.sqrMagnitude > 0.001f)
+                            {
+                                indicatorManager.UpdateSectorRotation(sector, transform, camFwd.normalized);
+                            }
+                        }
+                        // 可选：外圈提示
+                        indicatorManager.CreateCircleIndicator(center, starlightLength, true, true, BattleIndicatorManager.Tags.SkillRange, true);
+                        break;
+                    }
+                case 1: // 羽翼之枪：扇形
+                    {
+                        var sector = indicatorManager.CreateSectorIndicator(transform, wingLanceRadius, wingLanceAngle, BattleIndicatorManager.Tags.SkillPreview, true, "Holy");
+                        Camera cam = Camera.main ?? (Camera.allCamerasCount > 0 ? Camera.allCameras[0] : null);
+                        if (cam != null)
+                        {
+                            Vector3 camFwd = cam.transform.forward; camFwd.y = 0f;
+                            if (camFwd.sqrMagnitude > 0.001f)
+                            {
+                                indicatorManager.UpdateSectorRotation(sector, transform, camFwd.normalized);
+                            }
+                        }
+                        indicatorManager.CreateCircleIndicator(center, wingLanceRadius, true, true, BattleIndicatorManager.Tags.SkillRange, true);
+                        break;
+                    }
+                case 2: // 因果律预测：群体
+                case 3: // 天使赐福：群体
+                    {
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, true, BattleIndicatorManager.Tags.SkillRange, true, "Buff");
+                        break;
+                    }
+                case 4: //结束幻化
+                    break;
             }
         }
         else
         {
             switch (index)
             {
-                case 0: return 4; // 星光射线
-                case 1: return 2; // 羽翼之枪
-                case 2: return 4; // 因果律预测
-                case 3: return 5; // 天使赐福
-                case 4: return 0; // 结束幻化
+                case 0: //纯白疗愈：群体
+                case 2: // 因果律预测
+                case 3: // 水晶结界
+                    {
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, true, BattleIndicatorManager.Tags.SkillRange, true, "Heal");
+                        break;
+                    }
+                case 1: // 虚化刃：单体近战
+                    {
+                        // 高亮最近有效目标
+                        BattleUnit target = FindNearestInRange(meleeRange);
+                        indicatorManager.CreateCircleIndicator(center, meleeRange, true, true, BattleIndicatorManager.Tags.SkillRange, true);
+                        if (target != null) indicatorManager.CreateTargetMarker(target.transform, true);
+                        break;
+                    }
+                case 4: // 幻化：自身
+                    break;
             }
         }
-        return 0;
     }
 
-    // ====== 技能实现 ======
-
-    // 纯白疗愈：群体治疗
-    private bool Skill_PureHeal(BattleTurnManager tm)
+    private int GetCostByIndex(int index)
     {
-        foreach (var ally in GetAllies())
+        int baseCost = 0;
+        if (phantasmTurns > 0)
         {
-            int amount = Mathf.Max(1, Mathf.RoundToInt(unit.battleMagicAtk * healGroupPower));
-            skillSystem?.Heal(ally, amount);
-        }
-        indicatorManager?.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
-        return true;
-    }
-
-    // 虚化刃：魔法C+ 侧面命中自愈
-    private bool Skill_PhaseBlade(BattleTurnManager tm)
-    {
-        // 近战目标
-        BattleUnit target = FindTargetMelee();
-        if (target == null) { sfxPlayer?.Play("Error"); skillReselectRequested = true; return false; }
-
-        int dmg = Mathf.Max(1, Mathf.RoundToInt(unit.battleMagicAtk * bladePowerCPlus));
-        skillSystem?.CauseDamage(target, unit, dmg, DamageType.Magic);
-
-        if (IsSide(target))
-        {
-            int heal = Mathf.RoundToInt(dmg * bladeSideHealRatio);
-            skillSystem?.Heal(unit, heal);
-        }
-        return true;
-    }
-
-    // 因果律预测：群体回避↑ 会心↑ + 因果律
-    private bool Skill_CausalityPrediction(BattleTurnManager tm)
-    {
-        foreach (var ally in GetAllies())
-        {
-            ApplyTimedBuff_EvasionCrit(ally, evasionUpAmount, critUpAmount, buffTurnsDefault);
-            // 因果律：必定回避一次攻击（由 SkillSystem.CauseDamage 处理）
-            ally.causality = Mathf.Max(ally.causality, 1);
-            skillSystem?.ShowPopup("因果律", ally.transform.position, Color.yellow);
-        }
-        return true;
-    }
-
-    // 水晶结界：群体防御↑ + 再生
-    private bool Skill_CrystalBarrier(BattleTurnManager tm)
-    {
-        foreach (var ally in GetAllies())
-        {
-            ApplyTimedBuff_DefenseRegen(ally, defenseUpAmount, Mathf.Max(1, Mathf.RoundToInt(ally.battleMaxHp * regenRatioPerTurn)), buffTurnsDefault);
-            skillSystem?.ShowPopup("结界", ally.transform.position, new Color(0.6f, 0.9f, 1f));
-        }
-        return true;
-    }
-
-    // 幻化：开启光环
-    private bool Skill_Transform(BattleTurnManager tm)
-    {
-        isTransformed = true;
-        transformTurnsLeft = auraTurnsDefault;
-        skillSystem?.ShowPopup("幻化", unit.transform.position, new Color(1f, 0.85f, 0.4f));
-        return true;
-    }
-
-    // 结束幻化
-    private bool Skill_EndTransform()
-    {
-        isTransformed = false;
-        transformTurnsLeft = 0;
-        skillSystem?.ShowPopup("结束幻化", unit.transform.position, Color.white);
-        return true;
-    }
-
-    // 幻化后：羽翼之枪（大扇形，命中数自愈）
-    private bool Skill_WingSpear(BattleTurnManager tm)
-    {
-        int hit = 0;
-        Vector3 origin = transform.position;
-        Vector3 forward = GetCameraForwardOnXZ();
-
-        foreach (var enemy in GetEnemies())
-        {
-            Vector3 v = enemy.transform.position - origin; v.y = 0f;
-            if (v.magnitude <= spearRadius)
+            switch (index)
             {
-                float ang = Vector3.Angle(forward, v.normalized);
-                if (ang <= spearAngle * 0.5f)
-                {
-                    int dmg = Mathf.Max(1, Mathf.RoundToInt(unit.battleMagicAtk * spearPower));
-                    skillSystem?.CauseDamage(enemy, unit, dmg, DamageType.Magic);
-                    hit++;
-                }
+                case 0: baseCost = costPureHeal; break; // 星光射线 替换纯白疗愈（沿用costPureHeal）
+                case 1: baseCost = costPhaseBlade; break; // 羽翼之枪 替换虚化刃（沿用costPhaseBlade）
+                case 2: baseCost = costCausalityForecast; break; // 因果律预测
+                case 3: baseCost = costCrystalField; break; // 天使赐福 替换水晶结界（沿用costCrystalField）
+                case 4: baseCost = costEndPhantasm; break; //结束幻化
             }
         }
-
-        if (hit > 0)
+        else
         {
-            int heal = Mathf.Max(1, Mathf.RoundToInt(unit.battleMaxHp * spearSelfHealPerTargetRatio * hit));
-            skillSystem?.Heal(unit, heal);
-        }
-        return true;
-    }
-
-    // 幻化后：天使赐福（群体攻击↑ + 行动效率↑）
-    private bool Skill_AngelBlessing(BattleTurnManager tm)
-    {
-        foreach (var ally in GetAllies())
-        {
-            ApplyTimedBuff_AttackSpeed(ally, attackUpAmount, speedUpAmount, buffTurnsDefault);
-            skillSystem?.ShowPopup("赐福", ally.transform.position, new Color(1f, 0.9f, 0.6f));
-        }
-        return true;
-    }
-
-    // 幻化后：星光射线（直线贯穿，降魔防；命中多个目标再降魔攻）
-    private bool Skill_StarlightRay(BattleTurnManager tm)
-    {
-        Vector3 o = transform.position + Vector3.up * 0.5f;
-        Vector3 fwd = GetCameraForwardOnXZ().normalized;
-        int hit = 0;
-
-        foreach (var enemy in GetEnemies())
-        {
-            // 距离直线的最短距离（到射线的点距 <= 半宽，且在线段投影范围内）
-            Vector3 toTarget = enemy.transform.position - o;
-            float t = Vector3.Dot(toTarget, fwd);
-            if (t < 0 || t > starlightLength) continue;
-            Vector3 closest = o + fwd * t;
-            float dist = Vector3.Distance(enemy.transform.position, closest);
-            if (dist <= starlightWidth)
+            switch (index)
             {
-                int dmg = Mathf.Max(1, Mathf.RoundToInt(unit.battleMagicAtk * 1.3f));
-                skillSystem?.CauseDamage(enemy, unit, dmg, DamageType.Magic);
-                // 降魔防
-                ApplyTimedDebuff_MagicDef(enemy, -Mathf.Abs(magicDefDownAmount), buffTurnsDefault);
-                hit++;
+                case 0: baseCost = costPureHeal; break;
+                case 1: baseCost = costPhaseBlade; break;
+                case 2: baseCost = costCausalityForecast; break;
+                case 3: baseCost = costCrystalField; break;
+                case 4: baseCost = costPhantasm; break;
             }
         }
-
-        if (hit >= 2)
+        if (angelBlessingTurns > 0)
         {
-            foreach (var enemy in GetEnemies())
-            {
-                Vector3 toTarget = enemy.transform.position - o;
-                float t = Vector3.Dot(toTarget, fwd);
-                if (t < 0 || t > starlightLength) continue;
-                Vector3 closest = o + fwd * t;
-                float dist = Vector3.Distance(enemy.transform.position, closest);
-                if (dist <= starlightWidth)
-                {
-                    ApplyTimedDebuff_MagicAtk(enemy, -Mathf.Abs(magicAtkDownAmount), buffTurnsDefault);
-                }
-            }
+            baseCost = Mathf.Max(0, baseCost - angelBlessingBPCostReduction);
         }
-        return true;
+        return baseCost;
     }
 
-    // ====== Buff 应用（写入 BattleUnit 字段，由 SkillSystem.OnUnitTurnStart 统一结算/回退） ======
-    private void ApplyTimedBuff_EvasionCrit(BattleUnit u, int evasionAdd, int critAdd, int turns)
+    private int CalcMagicDamage(float powerMul)
     {
-        u.battleSpdDef += evasionAdd; u.deltaSpdDef += evasionAdd; u.buffTurns_EvasionUp = Mathf.Max(u.buffTurns_EvasionUp, turns);
-        u.battleCri += critAdd; u.deltaCri += critAdd; u.buffTurns_CritUp = Mathf.Max(u.buffTurns_CritUp, turns);
+        return Mathf.Max(1, Mathf.RoundToInt(unit.battleMagicAtk * powerMul));
     }
 
-    private void ApplyTimedBuff_DefenseRegen(BattleUnit u, int defAdd, int regenPerTurn, int turns)
-    {
-        u.battleDef += defAdd; u.deltaDef += defAdd; u.buffTurns_DefUp = Mathf.Max(u.buffTurns_DefUp, turns);
-        u.regenPerTurn = Mathf.Max(u.regenPerTurn, regenPerTurn);
-        u.buffTurns_Regen = Mathf.Max(u.buffTurns_Regen, turns);
-    }
-
-    private void ApplyTimedBuff_AttackSpeed(BattleUnit u, int atkAdd, int spdAdd, int turns)
-    {
-        u.battleAtk += atkAdd; u.deltaAtk += atkAdd; u.buffTurns_AttackUp = Mathf.Max(u.buffTurns_AttackUp, turns);
-        u.battleSpd += spdAdd; u.deltaSpd += spdAdd; u.buffTurns_SpdUp = Mathf.Max(u.buffTurns_SpdUp, turns);
-    }
-
-    private void ApplyTimedDebuff_MagicDef(BattleUnit u, int magicDefDelta, int turns)
-    {
-        u.battleMagicDef += magicDefDelta; u.deltaMagicDef += magicDefDelta;
-        u.debuffTurns_MagicDefDown = Mathf.Max(u.debuffTurns_MagicDefDown, turns);
-    }
-
-    private void ApplyTimedDebuff_MagicAtk(BattleUnit u, int magicAtkDelta, int turns)
-    {
-        u.battleMagicAtk += magicAtkDelta; u.deltaMagicAtk += magicAtkDelta;
-        u.debuffTurns_MagicAtkDown = Mathf.Max(u.debuffTurns_MagicAtkDown, turns);
-    }
-
-    // ====== 工具 ======
-    private IEnumerable<BattleUnit> GetAllies()
-    {
-        foreach (var u in FindObjectsOfType<BattleUnit>())
-            if (u != null && u.unitType == unit.unitType) yield return u;
-    }
-
-    private IEnumerable<BattleUnit> GetEnemies()
-    {
-        foreach (var u in FindObjectsOfType<BattleUnit>())
-            if (u != null && u.unitType != unit.unitType) yield return u;
-    }
-
-    private BattleUnit FindTargetMelee()
-    {
-        Camera cam = Camera.main;
-        BattleUnit target = RaycastUnitUnderCursor(cam);
-        if (target == null) target = FindNearestInRange(meleeRange);
-        if (target == null || !IsValidTarget(target) || Vector3.Distance(transform.position, target.transform.position) > meleeRange) return null;
-        return target;
-    }
-
-    private Vector3 GetCameraForwardOnXZ()
-    {
-        Camera cam = Camera.main;
-        Vector3 fwd = (cam != null ? cam.transform.forward : transform.forward);
-        fwd.y = 0f;
-        return fwd.sqrMagnitude > 0.001f ? fwd.normalized : transform.forward;
-    }
-
-    // 复用 Fayt 的检测
     private bool IsSide(BattleUnit target)
     {
         Vector3 toAttacker = (transform.position - target.transform.position).normalized;
@@ -405,5 +268,251 @@ public class LuminaController : PlayerController
             if (d <= range && d < best) { best = d; nearest = u; }
         }
         return nearest;
+    }
+
+    protected override IEnumerator TryQuickCastSkill(int index)
+    {
+        var tm = Object.FindObjectOfType<BattleTurnManager>();
+        int cost = GetCostByIndex(index);
+        if (tm != null && !tm.CanSpendBattlePoints(cost))
+        {
+            if (sfxPlayer != null) sfxPlayer.Play("Error");
+            skillReselectRequested = true;
+            yield break;
+        }
+
+        if (phantasmTurns > 0)
+        {
+            switch (index)
+            {
+                case 0: // 星光射线：使用扇形判定（半径+角度）
+                    {
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        Vector3 origin = transform.position;
+                        Vector3 forward = transform.forward;
+                        var cam = Camera.main;
+                        if (cam != null)
+                        {
+                            var cf = cam.transform.forward; cf.y = 0;
+                            if (cf.sqrMagnitude > 0.001f) forward = cf.normalized;
+                        }
+                        int hitCount = 0;
+                        foreach (var u in Object.FindObjectsOfType<BattleUnit>())
+                        {
+                            if (!IsValidTarget(u)) continue;
+                            Vector3 dir = (u.transform.position - origin); dir.y = 0f;
+                            float dist = dir.magnitude;
+                            if (dist <= starlightLength)
+                            {
+                                float ang = Vector3.Angle(forward, dir.normalized);
+                                if (ang <= starlightAngle * 0.5f)
+                                {
+                                    skillSystem?.CauseDamage(u, unit, CalcMagicDamage(starlightPower), DamageType.Magic);
+                                    // 魔防下降：-15
+                                    u.battleMagicDef -= 15; u.deltaMagicDef += 15; u.debuffTurns_MagicDefDown = Mathf.Max(u.debuffTurns_MagicDefDown, teamBuffDuration);
+                                    //u.luminaDownMagicDef = 3;
+                                    hitCount++;
+                                }
+                            }
+                        }
+                        if (hitCount >= 2)
+                        {
+                            foreach (var u in Object.FindObjectsOfType<BattleUnit>())
+                            {
+                                if (!IsValidTarget(u)) continue;
+                                Vector3 dir = (u.transform.position - origin); dir.y = 0f;
+                                float dist = dir.magnitude;
+                                if (dist <= starlightLength)
+                                {
+                                    float ang = Vector3.Angle(forward, dir.normalized);
+                                    if (ang <= starlightAngle * 0.5f)
+                                    {
+                                        u.battleMagicAtk -= 15; u.deltaMagicAtk += 15; u.debuffTurns_MagicAtkDown = Mathf.Max(u.debuffTurns_MagicAtkDown, teamBuffDuration);
+                                        //u.luminaDownMagicAtk = 3;
+                                    }
+                                }
+                            }
+                        }
+                        skillReselectRequested = false;
+                        sfxPlayer.Play("light_magic");
+                        yield return new WaitForSeconds(0.5f);
+                        yield break;
+                    }
+                case 1: // 羽翼之枪：大范围扇形，按命中数量给自己回血
+                    {
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        int applied = 0;
+                        Vector3 origin = transform.position;
+                        Vector3 forward = transform.forward; var cam = Camera.main; if (cam != null) { var cf = cam.transform.forward; cf.y = 0; if (cf.sqrMagnitude > 0.001f) forward = cf.normalized; }
+                        foreach (var u in Object.FindObjectsOfType<BattleUnit>())
+                        {
+                            if (!IsValidTarget(u)) continue;
+                            Vector3 dir = (u.transform.position - origin); dir.y = 0f;
+                            if (dir.magnitude <= wingLanceRadius)
+                            {
+                                float ang = Vector3.Angle(forward, dir.normalized);
+                                if (ang <= wingLanceAngle * 0.5f)
+                                {
+                                    skillSystem?.CauseDamage(u, unit, CalcMagicDamage(wingLancePower), DamageType.Magic);
+                                    applied++;
+                                }
+                            }
+                        }
+                        if (applied > 0 && skillSystem != null)
+                        {
+                            int heal = Mathf.RoundToInt(unit.battleMagicAtk * 0.2f * applied);
+                            skillSystem.Heal(unit, heal);
+                        }
+                        skillReselectRequested = false;
+                        sfxPlayer.Play("light_magic");
+                        yield return new WaitForSeconds(0.5f);
+                        yield break;
+                    }
+                case 2: // 因果律预测：群体回避上升、会心上升、+因果律
+                    {
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        foreach (var u in Object.FindObjectsOfType<BattleUnit>())
+                        {
+                            if (u.unitType != unit.unitType) continue; // 己方
+                                                                       // 回避上升
+                            u.luminaUpCri = 3;
+                            u.luminaUpEvation = 3;
+                            //int incEvd = Mathf.Max(1, Mathf.RoundToInt(u.battleSpdDef * 0.2f));
+                            //u.battleSpdDef += incEvd; u.deltaSpdDef += incEvd; u.buffTurns_EvasionUp = Mathf.Max(u.buffTurns_EvasionUp, teamBuffDuration);
+                            //// 会心上升
+                            //int incCri = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(1, u.battleCri) * 0.2f));
+                            //u.battleCri += incCri; u.deltaCri += incCri; u.buffTurns_CritUp = Mathf.Max(u.buffTurns_CritUp, teamBuffDuration);
+                            // 因果律：必定回避一次
+                            u.causality = Mathf.Max(u.causality, 1);
+                        }
+                        skillReselectRequested = false;
+                        sfxPlayer.Play("cure");
+                        yield return new WaitForSeconds(0.3f);
+                        yield break;
+                    }
+                case 3: // 天使赐福：群体攻击上升+降低行动点消耗
+                    {
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        foreach (var u in Object.FindObjectsOfType<BattleUnit>())
+                        {
+                            if (u.unitType != unit.unitType) continue;
+                            int incAtk = Mathf.Max(1, Mathf.RoundToInt(u.battleAtk * buffAttackUpRate));
+                            u.battleAtk += incAtk; u.deltaAtk += incAtk; u.buffTurns_AttackUp = Mathf.Max(u.buffTurns_AttackUp, teamBuffDuration);
+                        }
+                        angelBlessingTurns = teamBuffDuration;
+                        skillReselectRequested = false;
+                        yield return new WaitForSeconds(0.3f);
+                        yield break;
+                    }
+                case 4: //结束幻化
+                    {
+                        phantasmTurns = 0;
+                        skillReselectRequested = false;
+                        yield return null;
+                        yield break;
+                    }
+            }
+        }
+        else
+        {
+            switch (index)
+            {
+                case 0: //纯白疗愈：群体回血
+                    {
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        foreach (var u in Object.FindObjectsOfType<BattleUnit>())
+                        {
+                            if (u.unitType != unit.unitType) continue;
+                            int amount = Mathf.Max(1, Mathf.RoundToInt(unit.battleMagicAtk * 1.2f));
+                            skillSystem?.Heal(u, amount);
+                        }
+                        skillReselectRequested = false;
+                        sfxPlayer.Play("cure");
+                        yield return new WaitForSeconds(0.4f);
+                        yield break;
+                    }
+                case 1: // 虚化刃：魔法C+，侧面命中为 Lumina 回复生命
+                    {
+                        BattleUnit target = RaycastUnitUnderCursor(Camera.main);
+                        if (target == null) target = FindNearestInRange(meleeRange);
+                        if (target == null || !IsValidTarget(target) || Vector3.Distance(transform.position, target.transform.position) > meleeRange)
+                        {
+                            if (sfxPlayer != null) sfxPlayer.Play("Error");
+                            skillReselectRequested = true; yield break;
+                        }
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        int dmg = CalcMagicDamage(powerCPlus);
+                        skillSystem?.CauseDamage(target, unit, dmg, DamageType.Magic);
+                        if (IsSide(target) && skillSystem != null)
+                        {
+                            int heal = Mathf.Max(1, Mathf.RoundToInt(dmg * healRatioOnSideHit));
+                            skillSystem.Heal(unit, heal);
+                        }
+                        skillReselectRequested = false;
+                        sfxPlayer.Play("cut");
+                        yield return new WaitForSeconds(0.3f);
+                        yield break;
+                    }
+                case 2: // 因果律预测：群体回避/会心+因果律
+                    {
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        foreach (var u in Object.FindObjectsOfType<BattleUnit>())
+                        {
+                            if (u.unitType != unit.unitType) continue;
+                            u.luminaUpCri = 3;
+                            u.luminaUpEvation = 3;
+                            //int incEvd = Mathf.Max(1, Mathf.RoundToInt(u.battleSpdDef * 0.2f));
+                            //u.battleSpdDef += incEvd; u.deltaSpdDef += incEvd; u.buffTurns_EvasionUp = Mathf.Max(u.buffTurns_EvasionUp, teamBuffDuration);
+                            //int incCri = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(1, u.battleCri) * 0.2f));
+                            //u.battleCri += incCri; u.deltaCri += incCri; u.buffTurns_CritUp = Mathf.Max(u.buffTurns_CritUp, teamBuffDuration);
+                            u.causality = Mathf.Max(u.causality, 1);
+                        }
+                        skillReselectRequested = false;
+                        sfxPlayer.Play("light_magic");
+                        yield return new WaitForSeconds(0.3f);
+                        yield break;
+                    }
+                case 3: // 水晶结界：群体防御上升+缓慢回血
+                    {
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        foreach (var u in Object.FindObjectsOfType<BattleUnit>())
+                        {
+                            if (u.unitType != unit.unitType) continue;
+                            int incDef = Mathf.Max(1, Mathf.RoundToInt(u.battleDef * buffDefUpRate));
+                            u.battleDef += incDef; u.deltaDef += incDef; u.buffTurns_DefUp = Mathf.Max(u.buffTurns_DefUp, teamBuffDuration);
+                            // regen 持续
+                            u.buffTurns_Regen = Mathf.Max(u.buffTurns_Regen, teamBuffDuration);
+                            u.regenPerTurn = Mathf.Max(u.regenPerTurn, Mathf.Max(1, Mathf.RoundToInt(u.battleMaxHp * regenPercentPerTurn)));
+                        }
+                        skillReselectRequested = false;
+                        sfxPlayer.Play("light_magic");
+                        yield return new WaitForSeconds(0.3f);
+                        yield break;
+                    }
+                case 4: // 幻化：赋值4回合
+                    {
+                        if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                        sfxPlayer.Play("light_magic");
+                        phantasmTurns = 4;
+                        skillReselectRequested = false;
+                        yield return null;
+                        yield break;
+                    }
+            }
+        }
+
+        // 未匹配：认为失败
+        if (sfxPlayer != null) sfxPlayer.Play("Error");
+        skillReselectRequested = true;
+        yield break;
+    }
+
+    // 回合开始时衰减幻化和赐福
+    public override IEnumerator ExecuteTurn(BattleTurnManager turnManager)
+    {
+        // 在进入基类逻辑前，先衰减自身独有的计数（因 SkillSystem 不处理它们）
+        if (phantasmTurns > 0) phantasmTurns = Mathf.Max(0, phantasmTurns - 1);
+        if (angelBlessingTurns > 0) angelBlessingTurns = Mathf.Max(0, angelBlessingTurns - 1);
+        yield return base.ExecuteTurn(turnManager);
     }
 }

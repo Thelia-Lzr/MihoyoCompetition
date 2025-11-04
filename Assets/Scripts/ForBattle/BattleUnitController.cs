@@ -1,3 +1,4 @@
+using Assets.Scripts.ForBattle.Audio;
 using System.Collections;
 using UnityEngine;
 
@@ -33,6 +34,8 @@ public abstract class BattleUnitController : MonoBehaviour
     public bool sharedNormalizeSpeed = true;
     [Tooltip("Scale value sent to animator speed/forward.")]
     public float sharedAnimSpeedScale = 1f;
+
+    public SfxPlayer sfxPlayer;
 
     protected Animator sharedAnimator;
     protected bool hasSpeed, hasDirection, hasForward, hasTurn, hasGrounded, hasMovingBool;

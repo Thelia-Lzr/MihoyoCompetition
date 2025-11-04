@@ -117,10 +117,26 @@ public class WolfAIController : BattleUnitController
         // stop locomotion on reaching destination or abort conditions
         DriveSharedLocomotion(0f, Vector3.zero, moveSpeed);
 
+        // 攻击前无论如何都面向目标
+        if (target != null)
+        {
+            Vector3 face = target.transform.position - unit.transform.position;
+            face.y =0f;
+            if (face.sqrMagnitude >0.0001f)
+            {
+                //立即朝向目标
+                var t = sharedVisualRoot != null ? sharedVisualRoot : unit.transform;
+                t.rotation = Quaternion.LookRotation(face.normalized, Vector3.up);
+                //让动画系统知道期望朝向（速度为0，仅用于更新转身参数）
+                DriveSharedLocomotion(0f, face.normalized, moveSpeed);
+            }
+        }
+
         //造成伤害（等同于自身攻击力）
         if (target != null && skillSystem != null)
         {
             skillSystem.CauseDamage(target, unit, unit.battleAtk, DamageType.Physics);
+            sfxPlayer.Play("bite");
         }
 
         // 小延迟模拟出招

@@ -144,7 +144,7 @@ MonoBehaviour:
   m_text: Skill Name
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 12024a5368b76de45b36d89ac7b69011, type: 2}
-  m_sharedMaterial: {fileID: -6026203081926891419, guid: 12024a5368b76de45b36d89ac7b69011, type: 2}
+  m_sharedMaterial: {fileID: -980800148913346691, guid: 12024a5368b76de45b36d89ac7b69011, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
