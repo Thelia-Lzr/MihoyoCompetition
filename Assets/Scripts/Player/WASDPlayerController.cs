@@ -1,4 +1,5 @@
 using UnityEngine;
+using Assets.Scripts.ForBattle.Audio;
 
 [RequireComponent(typeof(CharacterController))]
 public class WASDPlayerController : MonoBehaviour
@@ -52,6 +53,12 @@ public class WASDPlayerController : MonoBehaviour
     [Tooltip("判定为移动状态的速度阈值")]
     public float movingThreshold = 0.1f;
 
+    [Header("Audio")]
+    [Tooltip("是否启用脚步声 SFX")]
+    public bool enableFootstepSfx = true;
+    [Tooltip("SfxPlayer 中用于循环的脚步声键名")]
+    public string footstepLoopKey = "steps";
+
     private CharacterController controller;
     private float verticalVelocity;
 
@@ -83,6 +90,23 @@ public class WASDPlayerController : MonoBehaviour
             float horiz = new Vector2(toCam.x, toCam.z).magnitude;
             camPitch = Mathf.Atan2(toCam.y, horiz) * Mathf.Rad2Deg;
             cameraDistance = Mathf.Clamp(toCam.magnitude, minDistance, maxDistance);
+        }
+    }
+
+    private void OnDisable()
+    {
+        // 停止脚步声循环
+        if (SfxPlayer.Instance != null)
+        {
+            SfxPlayer.Instance.StopLoop(footstepLoopKey);
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (SfxPlayer.Instance != null)
+        {
+            SfxPlayer.Instance.StopLoop(footstepLoopKey);
         }
     }
 
@@ -143,8 +167,8 @@ public class WASDPlayerController : MonoBehaviour
         // 运镜控制
         HandleCamera();
 
-        // 行走动画驱动
-        DriveAnimator();
+        // ??????????? + ???????
+        DriveAnimatorAndFootsteps();
     }
 
     private void HandleCamera()
@@ -193,19 +217,37 @@ public class WASDPlayerController : MonoBehaviour
         cameraTransform.rotation = Quaternion.Slerp(cameraTransform.rotation, desiredRot, rotLerp);
     }
 
-    private void DriveAnimator()
+    private void DriveAnimatorAndFootsteps()
     {
-        if (animator == null) return;
-        // 基于控制器的水平速度驱动动画
-        Vector3 vel = controller.velocity; vel.y = 0f;
+        // ????????????????????????
+        Vector3 vel = controller != null ? controller.velocity : Vector3.zero; vel.y = 0f;
         float planarSpeed = vel.magnitude * animSpeedScale;
-        if (!string.IsNullOrEmpty(animSpeedParam))
+
+        // Animator
+        if (animator != null)
         {
-            animator.SetFloat(animSpeedParam, planarSpeed, animDampTime, Time.deltaTime);
+            if (!string.IsNullOrEmpty(animSpeedParam))
+            {
+                animator.SetFloat(animSpeedParam, planarSpeed, animDampTime, Time.deltaTime);
+            }
+            if (!string.IsNullOrEmpty(animMovingBoolParam))
+            {
+                animator.SetBool(animMovingBoolParam, planarSpeed > movingThreshold);
+            }
         }
-        if (!string.IsNullOrEmpty(animMovingBoolParam))
+
+        // Footstep SFX
+        if (enableFootstepSfx && SfxPlayer.Instance != null)
         {
-            animator.SetBool(animMovingBoolParam, planarSpeed > movingThreshold);
+            bool moving = planarSpeed > movingThreshold;
+            if (controller != null && controller.isGrounded && moving)
+            {
+                SfxPlayer.Instance.PlayLoop(footstepLoopKey);
+            }
+            else
+            {
+                SfxPlayer.Instance.StopLoop(footstepLoopKey);
+            }
         }
     }
 }
