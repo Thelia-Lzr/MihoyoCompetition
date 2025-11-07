@@ -397,6 +397,7 @@ public class LuminaController : PlayerController
                         {
                             if (u.unitType != unit.unitType) continue;
                             int incAtk = Mathf.Max(1, Mathf.RoundToInt(u.battleAtk * buffAttackUpRate));
+                            
                             u.battleAtk += incAtk; u.deltaAtk += incAtk; u.buffTurns_AttackUp = Mathf.Max(u.buffTurns_AttackUp, teamBuffDuration);
                         }
                         angelBlessingTurns = teamBuffDuration;

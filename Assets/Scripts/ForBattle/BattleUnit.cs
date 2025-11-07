@@ -21,6 +21,9 @@ public class BattleUnit : MonoBehaviour
     [Tooltip("单位名称")]
     public string unitName;
 
+    [Tooltip("单位图标（用于 UI 显示）")]
+    public Sprite icon;
+
     [Tooltip("单位生命值")]
     public int maxhp;
 
@@ -93,6 +96,9 @@ public class BattleUnit : MonoBehaviour
     public int luminaUpEvation;
     public int luminaUpDef;
     public int luninaUpHp;
+    public int luminaUpAtk;
+
+    public int luminaExtraBattlePoint;
 
     public int luminaDownMagicDef;
     public int luminaDownMagicAtk;
@@ -157,6 +163,14 @@ public class BattleUnit : MonoBehaviour
                 controller.Bind(this);
             }
         }
+
+        // Ensure head-top HP UI exists on all units
+        var hpUi = GetComponent<BattleUnitHealthUI>();
+        if (hpUi == null)
+        {
+            hpUi = gameObject.AddComponent<BattleUnitHealthUI>();
+        }
+        hpUi.unit = this;
     }
 
     public void Flush()

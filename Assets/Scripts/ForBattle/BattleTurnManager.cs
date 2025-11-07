@@ -157,6 +157,16 @@ public class BattleTurnManager : MonoBehaviour
                 continue;
             }
 
+            
+            if (currentUnit.unitType == BattleUnitType.Player)
+            {
+                Debug.Log("玩家单位回合开始: " + currentUnit.unitName);
+                battlePoints += 1;
+                
+            }
+            currentUnit.Flush();
+
+
             Debug.Log("当前行动单位: " + currentUnit.unitName);
 
             // 回合开始：结算持续效果
