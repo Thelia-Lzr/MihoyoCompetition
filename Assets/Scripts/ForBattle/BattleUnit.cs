@@ -1,4 +1,5 @@
 using Assets.Scripts.ForBattle;
+using Assets.Scripts.ForBattle.Barriers;
 using Assets.Scripts.ForBattle.Indicators;
 using System;
 using System.Collections;
@@ -17,70 +18,70 @@ public class BattleUnit : MonoBehaviour
     public SkillSystem skillSystem;
     public BattleIndicatorManager indicatorManager;
 
-    [Header("åŸºç¡€å±æ€§")]
-    [Tooltip("å•ä½åç§°")]
+    [Header("Base Attributes")]
+    [Tooltip("Unit name")]
     public string unitName;
 
-    [Tooltip("å•ä½å›¾æ ‡ï¼ˆç”¨äº UI æ˜¾ç¤ºï¼‰")]
+    [Tooltip("Unit icon (for UI)")]
     public Sprite icon;
 
-    [Tooltip("å•ä½ç”Ÿå‘½å€¼")]
+    [Tooltip("Max HP")]
     public int maxhp;
 
-    [Tooltip("å•ä½å½“å‰ç”Ÿå‘½å€¼")]
+    [Tooltip("Current HP")]
     public int hp;
 
-    [Tooltip("å•ä½æ”»å‡»åŠ›")]
+    [Tooltip("Attack")]
     public int atk;
 
-    [Tooltip("å•ä½æ³•æœ¯æ”»å‡»åŠ›")]
+    [Tooltip("Magic Attack")]
     public int magicAtk;
 
-    [Tooltip("å•ä½ç‰©ç†é˜²å¾¡åŠ›")]
+    [Tooltip("Defense")]
     public int def;
 
-    [Tooltip("å•ä½æ³•æœ¯é˜²å¾¡åŠ›")]
+    [Tooltip("Magic Defense")]
     public int magicDef;
 
-    [Tooltip("å•ä½é€Ÿåº¦")]
+    [Tooltip("Speed")]
     public int spd;
 
-    [Tooltip("å•ä½é—ªé¿")]
+    [Tooltip("Evasion")]
     public int evasion;
 
-    [Tooltip("å•ä½ä¼šå¿ƒ")]
+    [Tooltip("Critical")]
     public int cri;
 
-    [Header("æˆ˜æ–—å†…å±æ€§")]
+    [Header("Battle Attributes")]
 
-    [Tooltip("å•ä½ç”Ÿå‘½å€¼")]
+    [Tooltip("Battle Max HP")]
     public int battleMaxHp;
 
-    [Tooltip("å•ä½å½“å‰ç”Ÿå‘½å€¼")]
+    [Tooltip("Battle Current HP")]
     public int battleHp;
 
-    [Tooltip("å•ä½æ”»å‡»åŠ›")]
+    [Tooltip("Battle Attack")]
     public int battleAtk;
 
-    [Tooltip("å•ä½æ³•æœ¯æ”»å‡»åŠ›")]
+    [Tooltip("Battle Magic Attack")]
     public int battleMagicAtk;
 
-    [Tooltip("å•ä½é˜²å¾¡åŠ›")]
+    [Tooltip("Battle Defense")]
     public int battleDef;
 
-    [Tooltip("å•ä½æ³•æœ¯é˜²å¾¡åŠ›")]
+    [Tooltip("Battle Magic Defense")]
     public int battleMagicDef;
 
-    [Tooltip("å•ä½é€Ÿåº¦")]
+    [Tooltip("Battle Speed")]
     public int battleSpd;
 
-    [Tooltip("å•ä½é—ªé¿")]
+    [Tooltip("Battle Evasion")]
     public int battleEvasion;
 
-    [Tooltip("å•ä½ä¼šå¿ƒ")]
+    [Tooltip("Battle Critical")]
     public int battleCri;
 
-    [Tooltip("å•ä½è¡ŒåŠ¨å€¼")]
+    [Tooltip("Battle Action Point")]
     public int battleActPoint;
 
     [Header("Buffs")]
@@ -105,7 +106,7 @@ public class BattleUnit : MonoBehaviour
 
 
 
-    [Tooltip("å•ä½ä½ç½®")]
+    [Tooltip("Battle Position")]
     public Vector2 battlePos;
 
     [Header("Timed Buffs/Debuffs")]
@@ -134,12 +135,23 @@ public class BattleUnit : MonoBehaviour
     public int regenPerTurn;
 
     [Header("Camera Follow")]
-    [Tooltip("ç›¸æœºè·Ÿéš/è§‚å¯Ÿçš„æ ¹èŠ‚ç‚¹(å¯é€‰)ã€‚è‹¥ä¸ºç©ºå°†ä½¿ç”¨å•ä½æ ¹Transform")]
+    [Tooltip("Optional camera root. If null uses unit transform")]
     public Transform cameraRoot;
 
     // Controller component (can be PlayerController, AIController, etc.)
     [HideInInspector]
     public BattleUnitController controller;
+
+    [Header("Floating HP Text Settings")]
+    [Tooltip("Vertical offset above unit for HP text")]
+    public float hpTextHeightOffset =2f;
+    [Tooltip("HP text font size")]
+    public int hpTextFontSize =18;
+    [Tooltip("Enable floating HP text over unit")] 
+    public bool enableFloatingHpText = true;
+    private TextMesh _hpTextMesh;
+
+    private BarrierContribution _lastBarrierContribution; // ÉÏÒ»Ö¡Ó¦ÓÃµÄ½á½ç¼Ó³É£¨ÓÃÓÚ²î·Ö³·Ïú£©
 
     public void AwakeBattleUnit()
     {
@@ -152,7 +164,7 @@ public class BattleUnit : MonoBehaviour
         battleSpd = spd;
         battleCri = cri;
         battleEvasion = evasion;
-        battleActPoint = 0;
+        battleActPoint =0;
 
         // Try to get a controller component on the same GameObject and bind
         if (controller == null)
@@ -165,12 +177,75 @@ public class BattleUnit : MonoBehaviour
         }
 
         // Ensure head-top HP UI exists on all units
-        var hpUi = GetComponent<BattleUnitHealthUI>();
-        if (hpUi == null)
+        EnsureHpText();
+    }
+
+    private void EnsureHpText()
+    {
+        if (!enableFloatingHpText) return;
+        if (_hpTextMesh != null) return;
+        // ´´½¨Ò»¸ö×ÓÎïÌåÓÃÓÚÏÔÊ¾ÑªÁ¿
+        GameObject go = new GameObject("HpText");
+        go.transform.SetParent(transform);
+        go.transform.localPosition = Vector3.up * hpTextHeightOffset;
+        _hpTextMesh = go.AddComponent<TextMesh>();
+        _hpTextMesh.fontSize = hpTextFontSize; // ×ÖÌå´óĞ¡
+        _hpTextMesh.color = Color.red; // ºìÉ«
+        _hpTextMesh.anchor = TextAnchor.MiddleCenter;
+        _hpTextMesh.alignment = TextAlignment.Center;
+        _hpTextMesh.characterSize =0.08f; // ¿ØÖÆÕûÌåËõ·Å£¨¿Éµ÷£©
+        _hpTextMesh.text = "";
+    }
+
+    private void UpdateHpFloatingText()
+    {
+        if (!enableFloatingHpText) return;
+        if (_hpTextMesh == null) EnsureHpText();
+        if (_hpTextMesh == null) return;
+        _hpTextMesh.text = $"{battleHp}/{battleMaxHp}";
+        // Ê¼ÖÕ³¯ÏòÖ÷ÉãÏñ»ú£¨¼òÒ× Billboard£©
+        var cam = Camera.main;
+        if (cam != null)
         {
-            hpUi = gameObject.AddComponent<BattleUnitHealthUI>();
+            //Ö»Ğı×ªYÒÔ±£³ÖÎÄ×ÖÊúÖ±
+            Vector3 camForward = cam.transform.forward;
+            camForward.y =0f;
+            if (camForward.sqrMagnitude >0.001f)
+            {
+                _hpTextMesh.transform.rotation = Quaternion.LookRotation(camForward);
+            }
         }
-        hpUi.unit = this;
+    }
+
+    private void ApplyBarrierEffects()
+    {
+        // ÒÆ³ıÉÏÒ»Ö¡¼Ó³É
+        if (!_lastBarrierContribution.EqualsTo(BarrierContribution.Zero))
+        {
+            battleAtk -= _lastBarrierContribution.atk;
+            battleDef -= _lastBarrierContribution.def;
+            battleMagicAtk -= _lastBarrierContribution.magicAtk;
+            battleMagicDef -= _lastBarrierContribution.magicDef;
+            battleEvasion -= _lastBarrierContribution.evasion;
+            battleCri -= _lastBarrierContribution.cri;
+        }
+
+        BarrierContribution total = BarrierContribution.Zero;
+        foreach (var barrier in BarrierBase.ActiveBarriers)
+        {
+            if (barrier == null) continue;
+            if (!barrier.IsUnitAffected(this)) continue;
+            var add = barrier.EvaluateContribution(this);
+            total = BarrierContribution.Add(total, add);
+        }
+
+        battleAtk += total.atk;
+        battleDef += total.def;
+        battleMagicAtk += total.magicAtk;
+        battleMagicDef += total.magicDef;
+        battleEvasion += total.evasion;
+        battleCri += total.cri;
+        _lastBarrierContribution = total;
     }
 
     public void Flush()
@@ -182,38 +257,37 @@ public class BattleUnit : MonoBehaviour
         battleSpd = spd;
         battleCri = cri;
         battleEvasion = evasion;
-        if (invisible > 0)
+        // Çå¿ÕÉÏÒ»Ö¡½á½ç¼Ó³É£¬±ÜÃâ»ØºÏË¢ĞÂºóÔÚ Update ÖĞ±»Îó¼õ
+        _lastBarrierContribution = BarrierContribution.Zero;
+        if (invisible >0)
         {
-            invisible -= 1;
+            invisible -=1;
         }
-        if (faytUpAtk > 0)
+        if (faytUpAtk >0)
         {
-            faytUpAtk -= 1;
+            faytUpAtk -=1;
             battleAtk += Mathf.RoundToInt(atk * .2f);
-        }
-        if (faytDownDef > 0)
-        {
-            faytDownDef -= 1;
+            faytDownDef -=1;
             battleDef -= Mathf.RoundToInt(def * .3f);
         }
-        if (luminaUpCri > 0)
+        if (luminaUpCri >0)
         {
-            luminaUpCri -= 1;
-            battleCri += 15;
+            luminaUpCri -=1;
+            battleCri +=15;
         }
-        if (luminaUpEvation > 0)
+        if (luminaUpEvation >0)
         {
-            luminaUpEvation -= 1;
-            battleEvasion += 15;
+            luminaUpEvation -=1;
+            battleEvasion +=15;
         }
-        if (luminaDownMagicDef > 0)
+        if (luminaDownMagicDef >0)
         {
-            luminaDownMagicDef -= 1;
+            luminaDownMagicDef -=1;
             battleMagicDef -= Mathf.RoundToInt(magicDef * .4f);
         }
-        if (luminaDownMagicAtk > 0)
+        if (luminaDownMagicAtk >0)
         {
-            luminaDownMagicAtk -= 1;
+            luminaDownMagicAtk -=1;
             battleMagicAtk -= Mathf.RoundToInt(magicAtk * .4f);
         }
     }
@@ -231,6 +305,7 @@ public class BattleUnit : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        
+        UpdateHpFloatingText();
+        ApplyBarrierEffects();
     }
 }

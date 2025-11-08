@@ -18,6 +18,8 @@ namespace Assets.Scripts.ForBattle.UI
         public TextMeshProUGUI hpText;
         public TextMeshProUGUI actionPromptText;
 
+        public GameObject UIs;
+
         public GameObject attackChosen;
         public GameObject itemsChosen;
         public GameObject escapeChosen;
@@ -45,21 +47,13 @@ namespace Assets.Scripts.ForBattle.UI
             escapeChosen.SetActive(false);
             skillChosen.SetActive(false);
             if (Choice == BattleActionType.Attack)
-            {
                 attackChosen.SetActive(true);
-            }
             else if (Choice == BattleActionType.Item)
-            {
                 itemsChosen.SetActive(true);
-            }
             else if (Choice == BattleActionType.Escape)
-            {
                 escapeChosen.SetActive(true);
-            }
             else if (Choice == BattleActionType.Skill)
-            {
                 skillChosen.SetActive(true);
-            }
 
             // Show or hide skill list panel via controller
             if (skillListController != null)
@@ -72,8 +66,9 @@ namespace Assets.Scripts.ForBattle.UI
         }
         void Start()
         {
-
+            // 不隐藏整个 Canvas，使行动条等常显
             HideUI();
+            if (battleCanvas != null) battleCanvas.gameObject.SetActive(true);
         }
 
         /// <summary>
@@ -81,8 +76,9 @@ namespace Assets.Scripts.ForBattle.UI
         /// </summary>
         public void ShowUI(BattleUnit unit, System.Action<BattleActionType> callback)
         {
-            if (battleCanvas != null)
-                battleCanvas.gameObject.SetActive(true);
+            if (battleCanvas != null) battleCanvas.gameObject.SetActive(true); // 始终保持显示
+
+            //UIs.SetActive(true);
 
             if (actionMenuPanel != null)
                 actionMenuPanel.SetActive(true);
@@ -101,11 +97,10 @@ namespace Assets.Scripts.ForBattle.UI
 
         public void HideUI()
         {
-            if (battleCanvas != null)
-                battleCanvas.gameObject.SetActive(false);
-            if (actionMenuPanel != null)
-                actionMenuPanel.SetActive(false);
+            //仅隐藏操作菜单，不隐藏主 Canvas（行动条等仍显示）
+            if (actionMenuPanel != null) actionMenuPanel.SetActive(false);
             onActionSelected = null;
+            //UIs.SetActive(false);
 
             if (skillListController != null)
                 skillListController.Hide();

@@ -1,0 +1,177 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5625919756259725893
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4475006401599613547}
+  - component: {fileID: 213642122029010113}
+  - component: {fileID: 2682546432434701818}
+  - component: {fileID: 4908338929614626694}
+  - component: {fileID: 4009701408569785844}
+  - component: {fileID: 8861945509734338059}
+  m_Layer: 0
+  m_Name: BattleTurnManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4475006401599613547
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5625919756259725893}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &213642122029010113
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5625919756259725893}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc0aeb24482c3c84cb445522cd170372, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  skillSystem: {fileID: 2682546432434701818}
+  cameraController: {fileID: 0}
+  indicatorManager: {fileID: 4009701408569785844}
+  status: 0
+  battlePoints: 0
+  battlePointsMax: 10
+  pointsPerNormalAttack: 1
+  battlePointsText: {fileID: 0}
+  actionPointThreshold: 10000
+  tickInterval: 0.1
+  actingUnit: {fileID: 0}
+--- !u!114 &2682546432434701818
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5625919756259725893}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 107129e147edda947b59cd9abc81bf78, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  battleTurnManager: {fileID: 213642122029010113}
+  popupDuration: 1
+  popupRiseDistance: 1
+  popupFontSize: 48
+  damageColor: {r: 1, g: 0, b: 0, a: 1}
+  healColor: {r: 0, g: 1, b: 0, a: 1}
+--- !u!114 &4908338929614626694
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5625919756259725893}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 066325b19ab544d449cb6464605dfd86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  battleCanvas: {fileID: 0}
+  actionMenuPanel: {fileID: 0}
+  unitNameText: {fileID: 0}
+  hpText: {fileID: 0}
+  actionPromptText: {fileID: 0}
+  UIs: {fileID: 0}
+  attackChosen: {fileID: 0}
+  itemsChosen: {fileID: 0}
+  escapeChosen: {fileID: 0}
+  skillChosen: {fileID: 0}
+  Choice: 0
+  skillListController: {fileID: 0}
+--- !u!114 &4009701408569785844
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5625919756259725893}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 83d66d4de4028484092ce4f88ce908f5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sectorIndicatorPrefab: {fileID: 0}
+  circleIndicatorPrefab: {fileID: 0}
+  targetMarkerPrefab: {fileID: 0}
+  rectangleIndicatorPrefab: {fileID: 0}
+  indicatorMaterial: {fileID: 10302, guid: 0000000000000000f000000000000000, type: 0}
+  validColor: {r: 0, g: 1, b: 0, a: 0.3}
+  invalidColor: {r: 1, g: 0, b: 0, a: 0.3}
+  targetColor: {r: 1, g: 0, b: 0, a: 1}
+  colors:
+  - name: Water
+    color: {r: 0, g: 0.8115015, b: 1, a: 1}
+  - name: Holy
+    color: {r: 0.99178326, g: 1, b: 0, a: 1}
+  - name: Angel
+    color: {r: 1, g: 0.6227779, b: 0, a: 1}
+  - name: Crystal
+    color: {r: 0.75705355, g: 0.38581347, b: 0.9622642, a: 1}
+  - name: blue
+    color: {r: 0, g: 0.35418844, b: 1, a: 1}
+  debugShowIndicatorMarker: 0
+--- !u!114 &8861945509734338059
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5625919756259725893}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c02d1bc6bc7cef46883f6c1b6b58468, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sounds:
+  - key: ChangeChoice
+    clip: {fileID: 8300000, guid: dea511c9ae8dd3446920b5209bc3b12c, type: 3}
+    volume: 1
+  - key: Error
+    clip: {fileID: 8300000, guid: d05f57a66e805ef4ea2ab8bf22087135, type: 3}
+    volume: 1
+  - key: Steps
+    clip: {fileID: 8300000, guid: b071231dee11aae4e8a69ed4bbe2c6f8, type: 3}
+    volume: 1
+  - key: light_magic
+    clip: {fileID: 8300000, guid: 61d093381e98113429dada6449dac1d7, type: 3}
+    volume: 1
+  - key: cure
+    clip: {fileID: 8300000, guid: 1f015be9b7899074585dcecc48e83014, type: 3}
+    volume: 1
+  - key: cut
+    clip: {fileID: 8300000, guid: 1ebdd497ebd30cd46a3f3a77bcd3b983, type: 3}
+    volume: 1
+  - key: bite
+    clip: {fileID: 8300000, guid: 1ebdd497ebd30cd46a3f3a77bcd3b983, type: 3}
+    volume: 1
+  - key: In
+    clip: {fileID: 8300000, guid: 7328d7388b6c4894787cf513557a3797, type: 3}
+    volume: 1
+  - key: Out
+    clip: {fileID: 8300000, guid: f2b0c560fb65d564eb70f991c5ab31a3, type: 3}
+    volume: 1
+  initialPoolSize: 4
+  minLoopPlayTime: 0.5

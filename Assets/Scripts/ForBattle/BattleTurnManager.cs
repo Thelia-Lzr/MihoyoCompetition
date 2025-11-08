@@ -4,6 +4,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using System; // 为事件 Action
+using UnityEngine.SceneManagement; // 场景跳转
+using Assets.Scripts.ForBattle.Barriers; //结界系统
 
 public class BattleTurnManager : MonoBehaviour
 {
@@ -19,29 +22,46 @@ public class BattleTurnManager : MonoBehaviour
 
     [Header("Battle Skill Points (战技点)")]
     [Tooltip("当前战技点（全队共享）")]
-    public int battlePoints = 0;
+    public int battlePoints =0;
     [Tooltip("战技点上限")]
-    public int battlePointsMax = 10;
+    public int battlePointsMax =10;
     [Tooltip("普通攻击每次获得的战技点")]
-    public int pointsPerNormalAttack = 1;
+    public int pointsPerNormalAttack =1;
 
     [Header("UI")]
     [Tooltip("用于显示战技点的 TextMeshPro 文本对象 (可选)")]
     public TMP_Text battlePointsText;
 
     [Header("Turn Settings")]
-    public int actionPointThreshold = 100;
-    public float tickInterval = 0.1f; // seconds per AP accumulation tick
+    public int actionPointThreshold =100;
+    public float tickInterval =0.1f; // seconds per AP accumulation tick
 
     private Coroutine turnCoroutine = null;
 
     // track previous unit to enable smooth transition
     private BattleUnit previousUnit = null;
 
+    // ===== 行动条事件 =====
+    /// <summary>
+    /// 在批量推进行动点后触发，用于行动条0.5s动画。
+    /// prevPoints/newPoints: 单位->行动点值映射；duration: 动画时长（固定0.5s）
+    /// </summary>
+    public event Action<Dictionary<BattleUnit, int>, Dictionary<BattleUnit, int>, float> OnActionBarAdvance;
+    /// <summary>
+    /// 单位开始执行回合（达到行动阈值、进入操作阶段）
+    /// </summary>
+    public event Action<BattleUnit> OnUnitTurnStart;
+    /// <summary>
+    /// 单位结束执行回合（行动点已扣除）
+    /// </summary>
+    public event Action<BattleUnit> OnUnitTurnEnd;
+
+    public BattleUnit actingUnit; // 当前正在执行回合的单位（供结界影响BP消耗）
+
     public void StartBattle()
     {
         this.status = BattleStatus.Battle;
-        battlePoints = 0;
+        battlePoints =0;
         UpdateBattlePointsUI();
     }
     public void EndBattle()
@@ -85,13 +105,13 @@ public class BattleTurnManager : MonoBehaviour
     /// </summary>
     private int FastForwardTicksToNextAction()
     {
-        if (turnOrder == null || turnOrder.Count == 0) return 0;
+        if (turnOrder == null || turnOrder.Count ==0) return 0;
 
         int minTicks = int.MaxValue;
         var units = turnOrder.GetAll();
         foreach (var u in units)
         {
-            if(u.battleHp <= 0)
+            if(u.battleHp <=0)
             {
                 u.EndBattle();
                 turnOrder.Remove(u);
@@ -100,14 +120,14 @@ public class BattleTurnManager : MonoBehaviour
             int perTick = Mathf.Max(1, Mathf.RoundToInt(u.battleSpd * tickInterval));
             if (u.battleActPoint >= actionPointThreshold)
             {
-                minTicks = 0;
+                minTicks =0;
                 break;
             }
             int need = Mathf.CeilToInt((actionPointThreshold - u.battleActPoint) / (float)perTick);
             if (need < minTicks) minTicks = need;
         }
 
-        if (minTicks == int.MaxValue || minTicks <= 0) return 0;
+        if (minTicks == int.MaxValue || minTicks <=0) return 0;
 
         // apply bulk increment
         foreach (var u in units)
@@ -122,208 +142,174 @@ public class BattleTurnManager : MonoBehaviour
         return minTicks;
     }
 
+    void Awake() { DontDestroyOnLoad(gameObject); }
     IEnumerator ProcessTurn()
     {
         // Main loop runs while status == Battle
         while (status == BattleStatus.Battle)
         {
-            if (turnOrder == null || turnOrder.Count == 0)
+            if (turnOrder == null || turnOrder.Count ==0)
             {
                 // nothing to do
                 yield return null;
                 continue;
             }
 
-            // Fast-forward AP to the next unit's turn to avoid many small ticks
+            //记录推进前行动点
+            Dictionary<BattleUnit, int> prevPoints = new Dictionary<BattleUnit, int>();
+            foreach (var u in turnOrder.GetAll()) if (u != null) prevPoints[u] = u.battleActPoint;
+
             int appliedTicks = FastForwardTicksToNextAction();
-            if (appliedTicks == 0)
+            if (appliedTicks ==0)
             {
-                // Fallback to small wait if no ticks applied (safety)
-                yield return new WaitForSeconds(tickInterval);
-            }
-
-            // It's someone's turn
-            BattleUnit currentUnit = turnOrder.Peek();
-            if (currentUnit == null)
-            {
-                yield return null;
-                continue;
-            }
-
-            if (currentUnit.battleActPoint < actionPointThreshold)
-            {
-                // Safety: if not reached yet, wait a small interval then loop
-                yield return new WaitForSeconds(tickInterval);
-                continue;
-            }
-
-            
-            if (currentUnit.unitType == BattleUnitType.Player)
-            {
-                Debug.Log("玩家单位回合开始: " + currentUnit.unitName);
-                battlePoints += 1;
-                
-            }
-            currentUnit.Flush();
-
-
-            Debug.Log("当前行动单位: " + currentUnit.unitName);
-
-            // 回合开始：结算持续效果
-            if (skillSystem != null)
-            {
-                skillSystem.OnUnitTurnStart(currentUnit);
-            }
-
-            // Show movement range indicator on ground if indicatorManager available
-            if (indicatorManager != null)
-            {
-                // try to get moveRange from controller if available (PlayerController or similar)
-                float moveRange = 0f;
-                var pc = currentUnit.controller as PlayerController;
-                if (pc != null)
-                {
-                    moveRange = pc.moveRange;
-                }
-                else
-                {
-                    // fallback: try to find a MovementRange component or default value
-                    // default to 3 units if unknown
-                    moveRange = 3f;
-                }
-
-                // Raycast down to find the ground height and place the circle on the floor
-                Vector3 origin = currentUnit.transform.position + Vector3.up * 0.5f;
-                RaycastHit hit;
-                Vector3 circleCenter;
-                if (Physics.Raycast(origin, Vector3.down, out hit, 5f))
-                {
-                    circleCenter = hit.point + Vector3.up * 0.01f; // slight offset above ground
-                }
-                else
-                {
-                    // fallback to y=0 plane
-                    circleCenter = new Vector3(currentUnit.transform.position.x, 0f + 0.01f, currentUnit.transform.position.z);
-                }
-
-                Debug.Log($"BattleTurnManager: Showing movement circle at {circleCenter} radius={moveRange}");
-                // Use hollow circle with MovementRange tag to ensure only one exists
-                indicatorManager.CreateCircleIndicator(
-                    circleCenter,
-                    moveRange,
-                    true,
-                    true,
-                    BattleIndicatorManager.Tags.MovementRange,
-                    true
-                );
+                // 若没有推进（已有单位就绪），不等待动画直接处理
             }
             else
             {
-                Debug.LogWarning("BattleTurnManager: indicatorManager is null; cannot show movement circle.");
+                // 推进后记录新值并播放0.5s 动画
+                Dictionary<BattleUnit, int> newPoints = new Dictionary<BattleUnit, int>();
+                foreach (var u in turnOrder.GetAll()) if (u != null) newPoints[u] = u.battleActPoint;
+                OnActionBarAdvance?.Invoke(prevPoints, newPoints,0.5f);
+                yield return new WaitForSeconds(0.5f);
             }
 
-            // Focus camera and allow player to inspect; run controller or fallback to space+action
-            if (cameraController != null)
+            //可能有多个单位同时达到阈值，依次处理全部，避免玩家回合被跳过
+            bool processedAny = false;
+            while (turnOrder.Count >0)
             {
-                Vector3 desiredOffset = new Vector3(0f, 1.2f, -3f);
+                BattleUnit currentUnit = turnOrder.Peek();
+                if (currentUnit == null || currentUnit.battleActPoint < actionPointThreshold) break; // 无更多就绪单位
 
-                // If we have a previous unit, transition smoothly from previous to current
-                if (previousUnit != null && previousUnit != currentUnit)
+                actingUnit = currentUnit; // 设置当前行动单位（用于结界BP减免）
+
+                processedAny = true;
+                currentUnit.Flush();
+                if (currentUnit.unitType == BattleUnitType.Player) battlePoints +=1;
+                UpdateBattlePointsUI();
+
+                Debug.Log("当前行动单位: " + currentUnit.unitName);
+
+                if (skillSystem != null) skillSystem.OnUnitTurnStart(currentUnit);
+                OnUnitTurnStart?.Invoke(currentUnit);
+
+                // 显示移动范围
+                if (indicatorManager != null)
                 {
-                    // perform transition and wait
-                    Transform fromT = previousUnit.cameraRoot != null ? previousUnit.cameraRoot : previousUnit.transform;
-                    Transform toT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
-                    yield return StartCoroutine(cameraController.TransitionToTarget(fromT, toT, desiredOffset, cameraController.blendTime));
+                    float moveRange =0f;
+                    var pc = currentUnit.controller as PlayerController;
+                    moveRange = pc != null ? pc.moveRange :3f;
+                    Vector3 origin = currentUnit.transform.position + Vector3.up *0.5f;
+                    RaycastHit hit;
+                    Vector3 circleCenter = Physics.Raycast(origin, Vector3.down, out hit,5f)
+                        ? hit.point + Vector3.up *0.01f
+                        : new Vector3(currentUnit.transform.position.x,0f +0.01f, currentUnit.transform.position.z);
+                    indicatorManager.CreateCircleIndicator(circleCenter, moveRange, true, true, BattleIndicatorManager.Tags.MovementRange, true);
                 }
-                else
+
+                // 相机与控制器执行
+                if (cameraController != null)
                 {
-                    // No previous unit, just focus immediately
-                    Transform toT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
-                    cameraController.FocusImmediate(toT, desiredOffset);
-
-                    // wait blend
-                    yield return new WaitForSeconds(cameraController.blendTime);
-                }
-
-                // Enable mouse control while controller runs or while waiting for fallback input
-                cameraController.EnableMouseControl(true);
-
-                if (currentUnit.controller != null)
-                {
-                    // call controller to execute the turn
-                    yield return StartCoroutine(currentUnit.controller.ExecuteTurn(this));
-                }
-                else
-                {
-                    // fallback: wait for space to confirm, then run simple action cam logic
-                    Debug.Log("按空格继续到下一个单位");
-                    yield return StartCoroutine(WaitForSpaceKey());
-
-                    // choose a target (example: first other unit)
-                    BattleUnit target = null;
-                    var others = turnOrder.GetAll();
-                    if (others != null && others.Count > 1)
+                    Vector3 desiredOffset = new Vector3(0f,1.2f, -3f);
+                    if (previousUnit != null && previousUnit != currentUnit)
                     {
-                        // pick first unit that is not currentUnit
-                        foreach (var u in others)
-                        {
-                            if (u != null && u != currentUnit)
-                            {
-                                target = u;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (target != null && cameraController != null)
-                    {
-                        Transform actorT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
-                        Transform targetT = target.cameraRoot != null ? target.cameraRoot : target.transform;
-                        yield return StartCoroutine(cameraController.PlayActionCam(actorT, targetT, new Vector3(0f,1.0f, -1.5f),0.7f));
+                        Transform fromT = previousUnit.cameraRoot != null ? previousUnit.cameraRoot : previousUnit.transform;
+                        Transform toT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
+                        yield return StartCoroutine(cameraController.TransitionToTarget(fromT, toT, desiredOffset, cameraController.transitionDuration));
                     }
                     else
                     {
-                        // do a small wait to simulate action
-                        yield return new WaitForSeconds(0.3f);
+                        Transform toT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
+                        cameraController.FocusImmediate(toT, desiredOffset);
+                        yield return new WaitForSeconds(cameraController.blendTime);
                     }
-                }
 
-                cameraController.EnableMouseControl(false);
-            }
-            else
-            {
-                // No camera controller: if unit has controller, run it, else fallback simple wait
-                if (currentUnit.controller != null)
-                {
-                    yield return StartCoroutine(currentUnit.controller.ExecuteTurn(this));
+                    cameraController.EnableMouseControl(true);
+                    if (currentUnit.controller != null)
+                    {
+                        yield return StartCoroutine(currentUnit.controller.ExecuteTurn(this));
+                    }
+                    else
+                    {
+                        Debug.Log("按空格继续到下一个单位");
+                        yield return StartCoroutine(WaitForSpaceKey());
+                    }
+                    cameraController.EnableMouseControl(false);
                 }
                 else
                 {
-                    yield return new WaitForSeconds(0.3f);
+                    if (currentUnit.controller != null)
+                        yield return StartCoroutine(currentUnit.controller.ExecuteTurn(this));
+                    else
+                        yield return new WaitForSeconds(0.3f);
                 }
+
+                // 扣除行动点并触发结束事件
+                currentUnit.battleActPoint = Mathf.Max(0, currentUnit.battleActPoint - actionPointThreshold);
+                OnUnitTurnEnd?.Invoke(currentUnit);
+
+                //触发所有结界的“回合结束结算”
+                foreach (var barrier in BarrierBase.ActiveBarriers)
+                {
+                    if (barrier == null) continue;
+                    barrier.ForceTurnEndResolve(currentUnit);
+                }
+
+                // 清理临时指示与排序（保留结界指示器）
+                if (indicatorManager != null)
+                {
+                    if (indicatorManager != null) indicatorManager.ClearEphemeralIndicators();
+                }
+                turnOrder.Sort();
+                previousUnit = currentUnit;
+                actingUnit = null; // 回合结束清空
             }
 
-            // finish action: subtract threshold (or reset)
-            currentUnit.battleActPoint = Mathf.Max(0, currentUnit.battleActPoint - actionPointThreshold);
+            // 若没有任何单位处理，做一个最小等待避免死循环占用 CPU
+            if (!processedAny) yield return new WaitForSeconds(tickInterval);
 
-            // Clear movement indicator after action
-            if (indicatorManager != null)
+            // ===== 回合循环末尾：清理死亡单位 =====
+            // 检查所有 BattleUnit，若血量<=0 则销毁并移出行动队列
+            var allUnitsInScene = GameObject.FindObjectsOfType<BattleUnit>();
+            if (allUnitsInScene != null && allUnitsInScene.Length >0)
             {
-                indicatorManager.ClearIndicators();
+                foreach (var u in allUnitsInScene)
+                {
+                    if (u == null) continue;
+                    if (u.battleHp <=0)
+                    {
+                        // 从队列移除并销毁
+                        if (turnOrder != null) turnOrder.Remove(u);
+                        u.EndBattle();
+                    }
+                }
+                //重新排序以反映队列更新
+                if (turnOrder != null) turnOrder.Sort();
             }
-
-            // resort after modification
-            turnOrder.Sort();
-
-            // set previous unit for next transition
-            previousUnit = currentUnit;
-
-            yield return null;
+            // ===== 胜利检测：无敌方单位则结束战斗并跳回 Scenario 场景 =====
+            bool anyEnemy = false;
+            foreach (var u in GameObject.FindObjectsOfType<BattleUnit>())
+            {
+                if (u != null && u.unitType == BattleUnitType.Enemy) { anyEnemy = true; break; }
+            }
+            if (!anyEnemy)
+            {
+                Debug.Log("玩家胜利！返回 Scenario 场景。");
+                EndBattle();
+                status = BattleStatus.Idle;
+                if (indicatorManager != null) indicatorManager.ClearAll();
+                if (Application.isPlaying)
+                {
+                    try { global::UnityEngine.SceneManagement.SceneManager.LoadScene("Scenario"); }
+                    catch (System.Exception ex) { Debug.LogWarning("加载 Scenario 场景失败: " + ex.Message); }
+                }
+                break; //退出循环
+            }
         }
 
         // Cleanup when exiting battle
         if (cameraController != null) cameraController.ShowOverview();
         turnCoroutine = null;
+        actingUnit = null;
     }
 
     IEnumerator WaitForSpaceKey()
@@ -368,9 +354,16 @@ public class BattleTurnManager : MonoBehaviour
     }
 
     // ===== 战技点（Battle Points）API =====
+    private int GetAdjustedCost(int amount)
+    {
+        if (actingUnit == null) return amount;
+        int barrierReduction = BarrierBase.GetTotalBpCostDeltaForUnit(actingUnit);
+        int adjusted = Mathf.Max(0, amount - barrierReduction);
+        return adjusted;
+    }
     public void ResetBattlePoints()
     {
-        battlePoints = 0;
+        battlePoints =0;
         UpdateBattlePointsUI();
     }
 
@@ -381,27 +374,27 @@ public class BattleTurnManager : MonoBehaviour
 
     public void AddBattlePoints(int amount)
     {
-        if (amount <= 0) return;
+        if (amount <=0) return;
         int before = battlePoints;
-        battlePoints = Mathf.Clamp(battlePoints + amount, 0, battlePointsMax);
+        battlePoints = Mathf.Clamp(battlePoints + amount,0, battlePointsMax);
         Debug.Log($"[BattleTurnManager] 战技点 +{amount}: {before} -> {battlePoints}/{battlePointsMax}");
         UpdateBattlePointsUI();
     }
 
     public bool CanSpendBattlePoints(int amount)
     {
-        return amount >= 0 && battlePoints >= amount;
+        int adj = GetAdjustedCost(amount);
+        return adj >=0 && battlePoints >= adj;
     }
-
     public bool TrySpendBattlePoints(int amount)
     {
-        if (!CanSpendBattlePoints(amount)) return false;
-        battlePoints -= amount;
-        Debug.Log($"[BattleTurnManager] 战技点 消耗 {amount}，剩余 {battlePoints}/{battlePointsMax}");
+        int adj = GetAdjustedCost(amount);
+        if (battlePoints < adj) return false;
+        battlePoints -= adj;
+        Debug.Log($"[BattleTurnManager] 战技点 消耗 {adj}(原始:{amount})，剩余 {battlePoints}/{battlePointsMax}");
         UpdateBattlePointsUI();
         return true;
     }
-
     private void UpdateBattlePointsUI()
     {
         if (battlePointsText == null) return;

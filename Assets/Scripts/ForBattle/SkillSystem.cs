@@ -1,5 +1,7 @@
 ﻿using System.Collections;
 using UnityEngine;
+using Assets.Scripts.ForBattle.Barriers;
+using System;
 
 namespace Assets.Scripts.ForBattle
 {
@@ -119,7 +121,7 @@ namespace Assets.Scripts.ForBattle
         {
             GameObject go = new GameObject("DamagePopup");
             // 头顶偏移 + 横向随机避免重叠
-            go.transform.position = worldPos + Vector3.up * 1.2f + new Vector3(Random.Range(-0.2f, 0.2f), 0f, 0f);
+            go.transform.position = worldPos + Vector3.up * 1.2f + new Vector3(UnityEngine.Random.Range(-0.2f, 0.2f), 0f, 0f);
 
             TextMesh tm = go.AddComponent<TextMesh>();
             tm.text = $"-{damageAmount}";
@@ -176,7 +178,7 @@ namespace Assets.Scripts.ForBattle
         {
             GameObject go = new GameObject("HealPopup");
             // 头顶偏移 + 横向随机避免重叠
-            go.transform.position = worldPos + Vector3.up * 1.2f + new Vector3(Random.Range(-0.2f, 0.2f), 0f, 0f);
+            go.transform.position = worldPos + Vector3.up * 1.2f + new Vector3(UnityEngine.Random.Range(-0.2f, 0.2f), 0f, 0f);
 
             TextMesh tm = go.AddComponent<TextMesh>();
             tm.text = $"+{healAmount}";
@@ -233,7 +235,7 @@ namespace Assets.Scripts.ForBattle
         {
             GameObject go = new GameObject("Popup");
             //头顶偏移 + 横向随机避免重叠
-            go.transform.position = worldPos + Vector3.up *1.2f + new Vector3(Random.Range(-0.2f,0.2f),0f,0f);
+            go.transform.position = worldPos + Vector3.up *1.2f + new Vector3(UnityEngine.Random.Range(-0.2f,0.2f),0f,0f);
 
             TextMesh tm = go.AddComponent<TextMesh>();
             tm.text = text ?? string.Empty;
@@ -333,6 +335,46 @@ namespace Assets.Scripts.ForBattle
                     delta = 0;
                 }
             }
+        }
+
+        /// <summary>
+        /// 放置结界：给定世界位置、拥有者以及结界类型（需是 BarrierBase 派生类）。
+        /// 结界 GameObject 将以空物体形式生成并附加该组件。
+        /// 可选传入额外初始化回调对新实例进行配置（如修改半径、持续回合数）。
+        /// </summary>
+        public BarrierBase PlaceBarrier(Vector3 worldPos, BattleUnit owner, Type barrierType, Action<BarrierBase> init = null)
+        {
+            if (barrierType == null || !typeof(BarrierBase).IsAssignableFrom(barrierType))
+            {
+                Debug.LogWarning("PlaceBarrier: 类型必须是 BarrierBase 派生类" );
+                return null;
+            }
+            GameObject go = new GameObject(barrierType.Name + "_Barrier");
+            go.transform.position = worldPos;
+            var barrier = (BarrierBase)go.AddComponent(barrierType);
+            barrier.owner = owner;
+            // 默认队伍过滤为 Allies（基于拥有者），可通过 init 回调修改
+            if (barrier.teamFilter == BarrierTeamFilter.All && owner != null)
+            {
+                barrier.teamFilter = BarrierTeamFilter.Allies;
+            }
+            init?.Invoke(barrier);
+            return barrier;
+        }
+
+        /// <summary>
+        /// 泛型版本放置结界，便于直接使用类型参数。
+        /// </summary>
+        public T PlaceBarrier<T>(Vector3 worldPos, BattleUnit owner, Action<T> init = null) where T : BarrierBase
+        {
+            GameObject go = new GameObject(typeof(T).Name + "_Barrier");
+            go.transform.position = worldPos;
+            var barrier = go.AddComponent<T>();
+            barrier.owner = owner;
+            if (barrier.teamFilter == BarrierTeamFilter.All && owner != null)
+                barrier.teamFilter = BarrierTeamFilter.Allies;
+            init?.Invoke(barrier);
+            return barrier;
         }
     }
 }

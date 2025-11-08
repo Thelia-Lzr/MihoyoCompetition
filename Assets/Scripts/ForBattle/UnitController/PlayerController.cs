@@ -61,8 +61,14 @@ public class PlayerController : BattleUnitController
     public float circleRadius = 3f;
     public LayerMask unitLayerMask;
     [Header("Combat Ranges")]
-    [Tooltip("近战范围（用于普攻和近战选择性技能）")]
+    [Tooltip("近战范围（用于普攻和近战选择性技能） ")]
     public float meleeRange = 2.5f;
+
+    [Header("Chain Settings")]
+    [Tooltip("连携范围半径")] public float chainRange = 1f;
+    private BattleUnit currentChainPartner = null;
+    private GameObject chainCircleSelf = null;
+    private GameObject chainCircleAlly = null;
 
     protected bool end;
 
@@ -98,6 +104,13 @@ public class PlayerController : BattleUnitController
     protected bool skillReselectRequested = false;
     // track previous frame position to compute actual velocity for animator
     private Vector3 _prevFramePos;
+
+    private List<BattleUnit> skillCandidateTargets = new List<BattleUnit>();
+    private int skillTargetCycleIndex = 0;
+
+    private List<BattleUnit> attackCandidateTargets = new List<BattleUnit>();
+    private int attackTargetCycleIndex = 0;
+    private BattleUnit currentAttackTarget = null; // 当前普攻预览目标
 
     public override void OnBattleStart()
     {
@@ -188,88 +201,105 @@ public class PlayerController : BattleUnitController
             // 等待玩家确认或允许移动
             while (!actionConfirmed)
             {
-                
+
                 if (prevChoice != battleUI.Choice)
                 {
                     indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
                     indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
                     indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
-                    
+                    //进入普攻模式时重置循环索引，默认从最近目标开始
+                    if (battleUI.Choice == BattleCanvasController.BattleActionType.Attack)
+                    {
+                        attackTargetCycleIndex = 0;
+                    }
                 }
                 // allow movement and QE selection
                 HandleMovement();
                 HandleSelectionSwitch(ref actionConfirmed);
 
-                // Preview logic for Attack: try to highlight a target under cursor or camera-facing
+                // Preview logic for Attack: target cycling like single-target skill
                 if (battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Attack)
                 {
-                    BattleUnit preview = null;
+                    // 构建候选（每帧刷新以适应移动），按距离排序
+                    attackCandidateTargets.Clear();
+                    var allUnits = FindObjectsOfType<BattleUnit>();
+                    for (int i = 0; i < allUnits.Length; i++)
+                    {
+                        var u = allUnits[i];
+                        if (!IsValidTarget(u)) continue;
+                        if (Vector3.Distance(transform.position, u.transform.position) <= meleeRange)
+                        {
+                            attackCandidateTargets.Add(u);
+                        }
+                    }
+                    // 按与自身距离升序排序（最近优先）
+                    attackCandidateTargets.Sort((a, b) =>
+                    {
+                        float da = Vector3.SqrMagnitude(a.transform.position - transform.position);
+                        float db = Vector3.SqrMagnitude(b.transform.position - transform.position);
+                        return da.CompareTo(db);
+                    });
+                    // 鼠标指向优先
+                    BattleUnit hovered = null;
                     Camera cam = Camera.main;
                     if (cam != null)
                     {
                         Ray ray = cam.ScreenPointToRay(Input.mousePosition);
                         if (Physics.Raycast(ray, out RaycastHit hit, 100f))
                         {
-                            preview = hit.collider.GetComponentInParent<BattleUnit>();
-                        }
-                        if (preview == null)
-                        {
-                            Ray centerRay = cam.ScreenPointToRay(new Vector3(Screen.width * 0.5f, Screen.height * 0.5f));
-                            if (Physics.Raycast(centerRay, out RaycastHit ch, 100f))
+                            var hu = hit.collider.GetComponentInParent<BattleUnit>();
+                            if (hu != null && IsValidTarget(hu) && Vector3.Distance(transform.position, hu.transform.position) <= meleeRange)
                             {
-                                preview = ch.collider.GetComponentInParent<BattleUnit>();
+                                hovered = hu;
                             }
                         }
                     }
 
-                    if (preview != null && IsValidTarget(preview) && Vector3.Distance(transform.position, preview.transform.position) <= meleeRange)
+                    // Tab 切换候选（仅当有候选时）
+                    if (Input.GetKeyDown(KeyCode.Tab) && attackCandidateTargets.Count > 0)
                     {
-                        // CreateTargetMarker 默认会清除之前的标记
-                        if (indicatorManager != null)
+                        attackTargetCycleIndex = (attackTargetCycleIndex + 1) % attackCandidateTargets.Count;
+                    }
+                    if (attackTargetCycleIndex >= attackCandidateTargets.Count) attackTargetCycleIndex = 0;
+
+                    BattleUnit displayTarget = hovered;
+                    if (displayTarget == null)
+                    {
+                        // 若没有鼠标指向，则使用当前循环索引（默认0即最近）
+                        if (attackCandidateTargets.Count > 0)
                         {
-                            indicatorManager.CreateTargetMarker(preview.transform);
+                            displayTarget = attackCandidateTargets[attackTargetCycleIndex];
                         }
-                        preselectedTarget = preview;
                     }
                     else
                     {
-                        // find nearest within melee range only
-                        BattleUnit near = null; float best = float.MaxValue;
-                        var all = FindObjectsOfType<BattleUnit>();
-                        foreach (var u in all)
+                        // 若有鼠标指向，将循环索引同步到该目标，便于继续按Tab从此处切换
+                        int idx = attackCandidateTargets.IndexOf(displayTarget);
+                        if (idx >= 0) attackTargetCycleIndex = idx;
+                    }
+                    currentAttackTarget = displayTarget;
+                    if (displayTarget != null)
+                    {
+                        preselectedTarget = displayTarget;
+                        if (indicatorManager != null)
                         {
-                            if (!IsValidTarget(u)) continue;
-                            float d = Vector3.Distance(transform.position, u.transform.position);
-                            if (d <= meleeRange && d < best)
-                            {
-                                best = d; near = u;
-                            }
-                        }
-                        if (near != null)
-                        {
-                            if (indicatorManager != null)
-                            {
-                                indicatorManager.CreateTargetMarker(near.transform);
-                            }
-                            preselectedTarget = near;
-                        }
-                        else
-                        {
-                            // 没有目标时清除标记
-                            if (indicatorManager != null)
-                            {
-                                indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
-                            }
+                            indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
+                            indicatorManager.CreateTargetMarker(displayTarget.transform, true);
                         }
                     }
+                    else
+                    {
+                        preselectedTarget = null;
+                        if (indicatorManager != null)
+                            indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
+                    }
+
                     // 显示普攻范围圈（跟随角色，空心）
                     if (indicatorManager != null)
                     {
-
                         Vector3 center = GetGroundPosition(transform.position);
                         if (attackRangeIndicator == null)
                         {
-                            //Debug.Log("显示普攻范围圈");
                             attackRangeIndicator = indicatorManager.CreateCircleIndicator(
                             center,
                             meleeRange,
@@ -284,10 +314,33 @@ public class PlayerController : BattleUnitController
                             indicatorManager.UpdateCircleIndicator(attackRangeIndicator, center, meleeRange, true);
                         }
                     }
+
+                    // 连携：寻找最近的友方并显示连携圈，并播放进入/退出音效
+                    var prevPartner = currentChainPartner;
+                    BattleUnit bestPartner = FindBestChainPartner();
+                    if (bestPartner != prevPartner)
+                    {
+                        if (prevPartner != null && sfxPlayer != null) sfxPlayer.Play("Out");
+                        if (bestPartner != null && sfxPlayer != null) sfxPlayer.Play("In");
+                        currentChainPartner = bestPartner;
+                    }
+                    UpdateChainVisuals(currentChainPartner);
+                    // ===== end chain visuals =====
                 }
                 else
                 {
-                    indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
+                    if (indicatorManager != null)
+                    {
+                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
+                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
+                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.ChainCircle);
+                    }
+                    if (currentChainPartner != null && sfxPlayer != null) sfxPlayer.Play("Out");
+                    currentAttackTarget = null;
+                    currentChainPartner = null;
+                    chainCircleSelf = null;
+                    chainCircleAlly = null;
+                    preselectedTarget = null;
                 }
 
 
@@ -302,6 +355,8 @@ public class PlayerController : BattleUnitController
                         slc.SetSkills(display);
                         skillListSignature = sig;
                         prevShownSkillIndex = -1;
+                        // 切换技能列表时重置目标循环
+                        skillTargetCycleIndex = 0;
                     }
                     slc.Show();
 
@@ -310,9 +365,55 @@ public class PlayerController : BattleUnitController
                     {
                         indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
                         indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillRange);
+                        // 技能改变时重置目标循环
+                        skillTargetCycleIndex = 0;
                     }
                     ShowSkillPreview(currIdx);
-                    // update following skill range circle around player
+
+                    // 单体技能目标循环逻辑
+                    if (IsSkillSingleTarget(currIdx))
+                    {
+                        // 构建候选列表：在施法范围内且有效
+                        skillCandidateTargets.Clear();
+                        float range = GetSkillCastRange(currIdx);
+                        foreach (var u in FindObjectsOfType<BattleUnit>())
+                        {
+                            if (!IsValidTarget(u)) continue;
+                            if (Vector3.Distance(transform.position, u.transform.position) <= range)
+                            {
+                                skillCandidateTargets.Add(u);
+                            }
+                        }
+                        if (skillCandidateTargets.Count > 0)
+                        {
+                            // Tab 切换目标
+                            if (Input.GetKeyDown(KeyCode.Tab))
+                            {
+                                skillTargetCycleIndex = (skillTargetCycleIndex + 1) % skillCandidateTargets.Count;
+                            }
+                            // 安全索引
+                            if (skillTargetCycleIndex >= skillCandidateTargets.Count) skillTargetCycleIndex = 0;
+                            var currentTarget = skillCandidateTargets[skillTargetCycleIndex];
+                            preselectedTarget = currentTarget; //赋值用于点击确认
+                            if (indicatorManager != null)
+                            {
+                                indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
+                                indicatorManager.CreateTargetMarker(currentTarget.transform, true);
+                            }
+                        }
+                        else
+                        {
+                            // 没有候选则清理标记
+                            preselectedTarget = null;
+                            indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
+                        }
+                    }
+                    else
+                    {
+                        // 非单体技能不显示目标标记（清除）
+                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
+                        preselectedTarget = null;
+                    }
 
                     prevShownSkillIndex = currIdx;
                 }
@@ -321,15 +422,27 @@ public class PlayerController : BattleUnitController
                     slc.Hide();
                     skillListSignature = null;
                     prevShownSkillIndex = -1;
-                    // 清理技能预览指示器
+                    //退出技能选择时清理所有技能相关指示器（保留普攻的目标标记）
                     if (indicatorManager != null)
                     {
                         indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
                         indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillRange);
-                        // clear skill range circle when not in Skill menu
-                        //indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.AttackRange);
+                        // 不要在这里清理 TargetMarker，普攻模式需要它
                         skillRangeIndicator = null;
                     }
+                    preselectedTarget = null;
+                }
+
+                // 当不在攻击模式也不在单体技能模式时始终清理目标标记
+                bool inAttack = battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Attack;
+                bool inSingleTargetSkill = battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Skill && IsSkillSingleTarget((slc != null) ? slc.GetSelectedIndex() : -1);
+                if (!inAttack && !inSingleTargetSkill)
+                {
+                    if (indicatorManager != null)
+                    {
+                        indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
+                    }
+                    preselectedTarget = null;
                 }
 
                 // Confirm with left mouse button
@@ -337,18 +450,22 @@ public class PlayerController : BattleUnitController
                 {
                     if (battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Attack)
                     {
-                        // confirm with preselected target (already previewed)
-                        if (preselectedTarget != null)
+                        BattleUnit toAttack = preselectedTarget != null ? preselectedTarget : currentAttackTarget;
+                        if (toAttack != null)
                         {
+                            var partnerSnapshot = currentChainPartner; // 捕获当下连携伙伴
+                            preselectedTarget = toAttack; // ensure ExecuteAttack uses same
                             selectedAction = BattleCanvasController.BattleActionType.Attack;
                             yield return ExecuteAttack();
-                            //sfxPlayer.Play("cut");
-                            selectedTarget = preselectedTarget;
+                            // 连携伙伴额外普攻（不影响其行动点）
+                            if (partnerSnapshot != null && partnerSnapshot.battleHp > 0)
+                            {
+                                yield return StartCoroutine(PerformChainAttack(partnerSnapshot, toAttack));
+                            }
                             actionConfirmed = true;
                         }
                         else
                         {
-                            // no target under cursor/selection: play error feedback
                             if (sfxPlayer != null) sfxPlayer.Play("Error");
                         }
                     }
@@ -359,7 +476,7 @@ public class PlayerController : BattleUnitController
                         // 在尝试前重置重选标志，由技能在失败时设置
                         skillReselectRequested = false;
                         yield return TryQuickCastSkill(idx);
-                        if(skillReselectRequested == false)
+                        if (skillReselectRequested == false)
                         {
                             actionConfirmed = true;
                         }
@@ -374,21 +491,22 @@ public class PlayerController : BattleUnitController
             if (indicatorManager != null)
             {
                 indicatorManager.ClearTargetMarkers();
-                indicatorManager.ClearAll();
+                // 改为仅清理临时指示器，保留结界 (Barrier) 指示器
+                indicatorManager.ClearEphemeralIndicators();
+                indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.ChainCircle);
                 skillRangeIndicator = null;
                 attackRangeIndicator = null;
             }
-
 
             if (battleUI != null) battleUI.HideUI();
             // 否则退出循环，结束回合
             break;
         }
 
-        // 清理指示器（包括主圈）
+        // 清理指示但保留结界范围圈
         if (indicatorManager != null)
         {
-            indicatorManager.ClearAll();
+            indicatorManager.ClearEphemeralIndicators();
             movementRangeIndicator = null;
             skillRangeIndicator = null;
         }
@@ -399,6 +517,8 @@ public class PlayerController : BattleUnitController
             sfxPlayer.StopLoop(stepLoopKey);
             isMoving = false;
         }
+
+        ResetMovementState();
 
         Debug.Log($"[PlayerController] {unit.unitName} 回合结束");
     }
@@ -585,7 +705,7 @@ public class PlayerController : BattleUnitController
         {
             Debug.Log($"攻击目标(预选): {preselectedTarget.unitName}");
             skillSystem.CauseDamage(preselectedTarget, unit, unit.battleAtk, DamageType.Physics);
-            sfxPlayer.Play("cut");
+            if (sfxPlayer != null) sfxPlayer.Play("cut");
             // grant battle points on successful normal attack (same as non-preselected path)
             var tmQuick = FindObjectOfType<BattleTurnManager>();
             if (tmQuick != null)
@@ -604,6 +724,7 @@ public class PlayerController : BattleUnitController
         {
             Debug.Log($"攻击目标: {selectedTarget.unitName}");
             skillSystem.CauseDamage(selectedTarget, unit, unit.battleAtk, DamageType.Physics);
+            if (sfxPlayer != null) sfxPlayer.Play("cut");
             // 普攻成功后积攒战技点
             var tm = FindObjectOfType<BattleTurnManager>();
             if (tm != null)
@@ -1013,6 +1134,12 @@ public class PlayerController : BattleUnitController
         onDirectionSelected?.Invoke(selectedDirection);
     }
 
+    // 判断技能是否为单体目标技能（子类可重写）
+    protected virtual bool IsSkillSingleTarget(int skillIndex)
+    {
+        return false; // 默认无单体技能
+    }
+
     // helper to keep movement indicator grounded
     protected Vector3 GetGroundPosition(Vector3 source)
     {
@@ -1092,5 +1219,137 @@ public class PlayerController : BattleUnitController
 
         // Ensure root motion doesn't block scripted move
         cachedAnimator.applyRootMotion = false;
+    }
+
+    // ===== 连携相关 =====
+
+    // ===== helper methods for chain =====
+    private BattleUnit FindBestChainPartner()
+    {
+        var all = FindObjectsOfType<BattleUnit>();
+        BattleUnit best = null;
+        float bestDist = float.MaxValue;
+        foreach (var u in all)
+        {
+            if (u == null || u == unit) continue;
+            if (u.unitType != unit.unitType) continue; // only allies
+            if (u.battleHp <= 0) continue;
+            float d = Vector3.Distance(transform.position, u.transform.position);
+            if (d <= chainRange * 2f) // 环相交即可连携
+            {
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = u;
+                }
+            }
+        }
+        return best;
+    }
+
+    private void UpdateChainVisuals(BattleUnit partner)
+    {
+        if (indicatorManager == null)
+        {
+            chainCircleSelf = null;
+            chainCircleAlly = null;
+            return;
+        }
+        if (partner == null)
+        {
+            // 清理连携圈
+            indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.ChainCircle);
+            chainCircleSelf = null;
+            chainCircleAlly = null;
+            return;
+        }
+        // 自己圈
+        Vector3 selfPos = GetGroundPosition(transform.position);
+        if (chainCircleSelf == null)
+        {
+            chainCircleSelf = indicatorManager.CreateChainCircle(selfPos, chainRange, true, false);
+        }
+        else
+        {
+            indicatorManager.UpdateCircleIndicatorKeepColor(chainCircleSelf, selfPos, chainRange);
+        }
+        //伙伴圈
+        Vector3 allyPos = GetGroundPosition(partner.transform.position);
+        if (chainCircleAlly == null)
+        {
+            chainCircleAlly = indicatorManager.CreateChainCircle(allyPos, chainRange, true, false);
+        }
+        else
+        {
+            indicatorManager.UpdateCircleIndicatorKeepColor(chainCircleAlly, allyPos, chainRange);
+        }
+    }
+
+    private IEnumerator PerformChainAttack(BattleUnit partner, BattleUnit target)
+    {
+        if (partner == null || target == null || skillSystem == null) yield break;
+        // 移动到普攻范围内
+        float partnerRange = meleeRange;
+        float partnerSpeed = moveSpeed;
+        var pc = partner.controller as PlayerController;
+        if (pc != null)
+        {
+            partnerRange = pc.meleeRange;
+            partnerSpeed = pc.moveSpeed;
+        }
+        // 简单直线移动，直到进入范围或超过安全步数
+        int safe = 0;
+        while (Vector3.Distance(partner.transform.position, target.transform.position) > partnerRange && safe < 600)
+        {
+            safe++;
+            Vector3 dir = (target.transform.position - partner.transform.position);
+            dir.y = 0f;
+            float dist = dir.magnitude;
+            if (dist < 0.001f) break;
+            Vector3 step = dir.normalized * partnerSpeed * Time.deltaTime;
+            if (step.magnitude > dist) step = dir.normalized * dist;
+            partner.transform.position += step;
+
+            // 播放伙伴移动动画（根据实际步进速度驱动Speed参数）
+            if (pc != null && pc.cachedAnimator != null && pc.animHasSpeedParam && !string.IsNullOrEmpty(pc.animatorSpeedParam))
+            {
+                float actualPlanarSpeed = step.magnitude / Mathf.Max(Time.deltaTime, 0.0001f);
+                float speedVal = pc.normalizeAnimatorSpeed ? (actualPlanarSpeed / Mathf.Max(0.0001f, partnerSpeed)) : actualPlanarSpeed;
+                pc.cachedAnimator.SetFloat(pc.animatorSpeedParam, speedVal * pc.animatorSpeedScale);
+            }
+            yield return null;
+        }
+        // 停止伙伴移动动画
+        if (pc != null && pc.cachedAnimator != null && pc.animHasSpeedParam && !string.IsNullOrEmpty(pc.animatorSpeedParam))
+        {
+            pc.cachedAnimator.SetFloat(pc.animatorSpeedParam, 0f);
+        }
+        // 执行一次普攻伤害与音效、积攒战技点
+        if (target.battleHp > 0)
+        {
+            skillSystem.CauseDamage(target, partner, partner.battleAtk, DamageType.Physics);
+            if (sfxPlayer != null) sfxPlayer.Play("cut");
+            var tm = FindObjectOfType<BattleTurnManager>();
+            if (tm != null)
+            {
+                tm.AddBattlePoints(tm.pointsPerNormalAttack);
+            }
+        }
+        // 再次确保动画停止
+        if (pc != null && pc.cachedAnimator != null && pc.animHasSpeedParam && !string.IsNullOrEmpty(pc.animatorSpeedParam))
+        {
+            pc.cachedAnimator.SetFloat(pc.animatorSpeedParam, 0f);
+        }
+        yield return new WaitForSeconds(0.2f);
+    }
+
+    private void ResetMovementState()
+    {
+        isMoving = false;
+        if (sfxPlayer != null && !string.IsNullOrEmpty(stepLoopKey)) sfxPlayer.StopLoop(stepLoopKey);
+        if (cachedAnimator != null && animHasSpeedParam && !string.IsNullOrEmpty(animatorSpeedParam))
+        {
+            cachedAnimator.SetFloat(animatorSpeedParam, 0f);
+        }
     }
 }

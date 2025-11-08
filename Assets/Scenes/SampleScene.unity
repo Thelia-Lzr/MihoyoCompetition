@@ -2236,6 +2236,102 @@ Transform:
   - {fileID: 628076935}
   m_Father: {fileID: 2018937282}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &171684799
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 171684800}
+  - component: {fileID: 171684802}
+  - component: {fileID: 171684801}
+  - component: {fileID: 171684803}
+  m_Layer: 5
+  m_Name: Panel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &171684800
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 171684799}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1382592462}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 1}
+  m_AnchorMax: {x: 0.5, y: 1}
+  m_AnchoredPosition: {x: 0, y: -100}
+  m_SizeDelta: {x: 1000, y: 20}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &171684801
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 171684799}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0.392}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 1
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &171684802
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 171684799}
+  m_CullTransparentMesh: 1
+--- !u!114 &171684803
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 171684799}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3175a8dbd5bb1f74ba76dd10ab22be0a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  turnManager: {fileID: 0}
+  barContainer: {fileID: 171684800}
+  iconPrefab: {fileID: 8965032054248771843, guid: 984a75189bba1264386f9452834bc8f3, type: 3}
+  executingScale: 1.3
+  normalScale: 1
+  barLength: 1000
+  displayMaxValue: 10000
+  autoBuild: 1
 --- !u!1 &178258819
 GameObject:
   m_ObjectHideFlags: 0
@@ -8235,14 +8331,15 @@ MonoBehaviour:
   thisController: {fileID: 664780205}
   skillSystem: {fileID: 2053019918}
   indicatorManager: {fileID: 2053019920}
-  unitName: 2
+  unitName: "\u66B4\u5F92"
+  icon: {fileID: 21300000, guid: 9681348bd2df6904bb029f896a37fbc3, type: 3}
   maxhp: 160
   hp: 160
   atk: 0
   magicAtk: 0
   def: 0
   magicDef: 0
-  spd: 120
+  spd: 110
   evasion: 0
   cri: 0
   battleMaxHp: 0
@@ -8264,6 +8361,8 @@ MonoBehaviour:
   luminaUpEvation: 0
   luminaUpDef: 0
   luninaUpHp: 0
+  luminaUpAtk: 0
+  luminaExtraBattlePoint: 0
   luminaDownMagicDef: 0
   luminaDownMagicAtk: 0
   battlePos: {x: 0, y: 0}
@@ -8285,6 +8384,9 @@ MonoBehaviour:
   regenPerTurn: 0
   cameraRoot: {fileID: 1737976534}
   controller: {fileID: 0}
+  hpTextHeightOffset: 2
+  hpTextFontSize: 18
+  enableFloatingHpText: 1
 --- !u!1 &670445029
 GameObject:
   m_ObjectHideFlags: 0
@@ -11718,6 +11820,31 @@ MonoBehaviour:
   mouseSensitivity: 0.01
   minPitch: -80
   maxPitch: 80
+  transitionDuration: 0.5
+  transitionCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   orbitRadius: 3
 --- !u!4 &967864214
 Transform:
@@ -12798,14 +12925,15 @@ MonoBehaviour:
   thisController: {fileID: 1004468297}
   skillSystem: {fileID: 2053019918}
   indicatorManager: {fileID: 2053019920}
-  unitName: 2
+  unitName: "\u66B4\u5F92"
+  icon: {fileID: 21300000, guid: 9681348bd2df6904bb029f896a37fbc3, type: 3}
   maxhp: 160
   hp: 160
   atk: 0
   magicAtk: 0
   def: 0
   magicDef: 0
-  spd: 120
+  spd: 90
   evasion: 0
   cri: 0
   battleMaxHp: 0
@@ -12827,6 +12955,8 @@ MonoBehaviour:
   luminaUpEvation: 0
   luminaUpDef: 0
   luninaUpHp: 0
+  luminaUpAtk: 0
+  luminaExtraBattlePoint: 0
   luminaDownMagicDef: 0
   luminaDownMagicAtk: 0
   battlePos: {x: 0, y: 0}
@@ -12848,6 +12978,9 @@ MonoBehaviour:
   regenPerTurn: 0
   cameraRoot: {fileID: 936643374}
   controller: {fileID: 0}
+  hpTextHeightOffset: 2
+  hpTextFontSize: 18
+  enableFloatingHpText: 1
 --- !u!114 &1004468299
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -18392,6 +18525,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currentStatus: 0
   battleTurnManager: {fileID: 2053019916}
+  systemsPrefab: {fileID: 0}
+  resourcesPrefabPath: Prefabs/BattleSystems
 --- !u!1 &1378281485
 GameObject:
   m_ObjectHideFlags: 0
@@ -18648,6 +18783,7 @@ RectTransform:
   m_Children:
   - {fileID: 1026593938}
   - {fileID: 399443926}
+  - {fileID: 171684800}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -19103,6 +19239,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   meleeRange: 2.5
+  chainRange: 1
   powerCPlus: 1
   wingLancePower: 1.2
   starlightPower: 1.3
@@ -19142,13 +19279,14 @@ MonoBehaviour:
   skillSystem: {fileID: 2053019918}
   indicatorManager: {fileID: 2053019920}
   unitName: Lumina
+  icon: {fileID: 21300000, guid: 03672982666222444a5fe15eee385ab7, type: 3}
   maxhp: 200
   hp: 200
   atk: 30
   magicAtk: 40
   def: 30
   magicDef: 30
-  spd: 120
+  spd: 200
   evasion: 0
   cri: 10
   battleMaxHp: 0
@@ -19170,6 +19308,8 @@ MonoBehaviour:
   luminaUpEvation: 0
   luminaUpDef: 0
   luninaUpHp: 0
+  luminaUpAtk: 0
+  luminaExtraBattlePoint: 0
   luminaDownMagicDef: 0
   luminaDownMagicAtk: 0
   battlePos: {x: 0, y: 0}
@@ -19191,6 +19331,9 @@ MonoBehaviour:
   regenPerTurn: 0
   cameraRoot: {fileID: 1167501440}
   controller: {fileID: 0}
+  hpTextHeightOffset: 2
+  hpTextFontSize: 18
+  enableFloatingHpText: 1
 --- !u!4 &1415848994 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 5159078012444724336, guid: c26f392ca1799bc4fa0e036c1f52a1b5, type: 3}
@@ -20573,9 +20716,9 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 2053019922}
   - {fileID: 1370565270}
   - {fileID: 967864214}
-  - {fileID: 2053019917}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1529453874
@@ -22565,14 +22708,15 @@ MonoBehaviour:
   thisController: {fileID: 1724374048}
   skillSystem: {fileID: 2053019918}
   indicatorManager: {fileID: 2053019920}
-  unitName: 2
+  unitName: "\u66B4\u5F92"
+  icon: {fileID: 21300000, guid: 9681348bd2df6904bb029f896a37fbc3, type: 3}
   maxhp: 160
   hp: 160
   atk: 0
   magicAtk: 0
   def: 0
   magicDef: 0
-  spd: 120
+  spd: 100
   evasion: 0
   cri: 0
   battleMaxHp: 0
@@ -22594,6 +22738,8 @@ MonoBehaviour:
   luminaUpEvation: 0
   luminaUpDef: 0
   luninaUpHp: 0
+  luminaUpAtk: 0
+  luminaExtraBattlePoint: 0
   luminaDownMagicDef: 0
   luminaDownMagicAtk: 0
   battlePos: {x: 0, y: 0}
@@ -22615,6 +22761,9 @@ MonoBehaviour:
   regenPerTurn: 0
   cameraRoot: {fileID: 362280569}
   controller: {fileID: 0}
+  hpTextHeightOffset: 2
+  hpTextFontSize: 18
+  enableFloatingHpText: 1
 --- !u!114 &1724374050
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -27227,14 +27376,15 @@ MonoBehaviour:
   thisController: {fileID: 1984781047}
   skillSystem: {fileID: 2053019918}
   indicatorManager: {fileID: 2053019920}
-  unitName: 2
+  unitName: "\u66B4\u5F92"
+  icon: {fileID: 21300000, guid: 9681348bd2df6904bb029f896a37fbc3, type: 3}
   maxhp: 160
   hp: 160
   atk: 0
   magicAtk: 0
   def: 0
   magicDef: 0
-  spd: 120
+  spd: 80
   evasion: 0
   cri: 0
   battleMaxHp: 0
@@ -27256,6 +27406,8 @@ MonoBehaviour:
   luminaUpEvation: 0
   luminaUpDef: 0
   luninaUpHp: 0
+  luminaUpAtk: 0
+  luminaExtraBattlePoint: 0
   luminaDownMagicDef: 0
   luminaDownMagicAtk: 0
   battlePos: {x: 0, y: 0}
@@ -27277,6 +27429,9 @@ MonoBehaviour:
   regenPerTurn: 0
   cameraRoot: {fileID: 2144697850}
   controller: {fileID: 0}
+  hpTextHeightOffset: 2
+  hpTextFontSize: 18
+  enableFloatingHpText: 1
 --- !u!114 &1984781049
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -28504,166 +28659,66 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2028241360}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &2053019915
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2053019917}
-  - component: {fileID: 2053019916}
-  - component: {fileID: 2053019918}
-  - component: {fileID: 2053019919}
-  - component: {fileID: 2053019920}
-  - component: {fileID: 2053019921}
-  m_Layer: 0
-  m_Name: BattleTurnManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &2053019916
+--- !u!114 &2053019916 stripped
 MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 213642122029010113, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+  m_PrefabInstance: {fileID: 4985673374314546416}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2053019915}
+  m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fc0aeb24482c3c84cb445522cd170372, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  skillSystem: {fileID: 2053019918}
-  cameraController: {fileID: 967864213}
-  indicatorManager: {fileID: 2053019920}
-  status: 0
-  battlePoints: 0
-  battlePointsMax: 10
-  pointsPerNormalAttack: 1
-  battlePointsText: {fileID: 459918538}
-  actionPointThreshold: 10000
-  tickInterval: 0.1
---- !u!4 &2053019917
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2053019915}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1526825786}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2053019918
+--- !u!114 &2053019918 stripped
 MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 2682546432434701818, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+  m_PrefabInstance: {fileID: 4985673374314546416}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2053019915}
+  m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 107129e147edda947b59cd9abc81bf78, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  battleTurnManager: {fileID: 2053019916}
-  popupDuration: 1
-  popupRiseDistance: 1
-  popupFontSize: 48
-  damageColor: {r: 1, g: 0, b: 0, a: 1}
-  healColor: {r: 0, g: 1, b: 0, a: 1}
---- !u!114 &2053019919
+--- !u!114 &2053019919 stripped
 MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+  m_PrefabInstance: {fileID: 4985673374314546416}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2053019915}
+  m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 066325b19ab544d449cb6464605dfd86, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  battleCanvas: {fileID: 1382592461}
-  actionMenuPanel: {fileID: 0}
-  unitNameText: {fileID: 1858558061}
-  hpText: {fileID: 1762460468}
-  actionPromptText: {fileID: 1003936230}
-  attackChosen: {fileID: 1869531104}
-  itemsChosen: {fileID: 1767130394}
-  escapeChosen: {fileID: 178258819}
-  skillChosen: {fileID: 872276820}
-  Choice: 0
-  skillListController: {fileID: 399443925}
---- !u!114 &2053019920
+--- !u!114 &2053019920 stripped
 MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 4009701408569785844, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+  m_PrefabInstance: {fileID: 4985673374314546416}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2053019915}
+  m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 83d66d4de4028484092ce4f88ce908f5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  sectorIndicatorPrefab: {fileID: 0}
-  circleIndicatorPrefab: {fileID: 0}
-  targetMarkerPrefab: {fileID: 0}
-  indicatorMaterial: {fileID: 10302, guid: 0000000000000000f000000000000000, type: 0}
-  validColor: {r: 0, g: 1, b: 0, a: 0.3}
-  invalidColor: {r: 1, g: 0, b: 0, a: 0.3}
-  targetColor: {r: 1, g: 0, b: 0, a: 1}
-  colors:
-  - name: Water
-    color: {r: 0, g: 0.8115015, b: 1, a: 0.101960786}
-  - name: Holy
-    color: {r: 1, g: 0.87765956, b: 0, a: 0.24313726}
-  debugShowIndicatorMarker: 0
---- !u!114 &2053019921
+--- !u!114 &2053019921 stripped
 MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 8861945509734338059, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+  m_PrefabInstance: {fileID: 4985673374314546416}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2053019915}
+  m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4c02d1bc6bc7cef46883f6c1b6b58468, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  sounds:
-  - key: ChangeChoice
-    clip: {fileID: 8300000, guid: dea511c9ae8dd3446920b5209bc3b12c, type: 3}
-    volume: 1
-  - key: Error
-    clip: {fileID: 8300000, guid: d05f57a66e805ef4ea2ab8bf22087135, type: 3}
-    volume: 1
-  - key: Steps
-    clip: {fileID: 8300000, guid: b071231dee11aae4e8a69ed4bbe2c6f8, type: 3}
-    volume: 1
-  - key: light_magic
-    clip: {fileID: 8300000, guid: 61d093381e98113429dada6449dac1d7, type: 3}
-    volume: 1
-  - key: cure
-    clip: {fileID: 8300000, guid: 1f015be9b7899074585dcecc48e83014, type: 3}
-    volume: 1
-  - key: cut
-    clip: {fileID: 8300000, guid: 1ebdd497ebd30cd46a3f3a77bcd3b983, type: 3}
-    volume: 1
-  - key: bite
-    clip: {fileID: 8300000, guid: 8436c9c944480644383e6314ef05eee4, type: 3}
-    volume: 1
-  initialPoolSize: 4
-  minLoopPlayTime: 0.5
+--- !u!4 &2053019922 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+  m_PrefabInstance: {fileID: 4985673374314546416}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &2053723016
 GameObject:
   m_ObjectHideFlags: 0
@@ -34458,6 +34513,115 @@ Transform:
   m_Children: []
   m_Father: {fileID: 5663212596773146033}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &4985673374314546416
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1526825786}
+    m_Modifications:
+    - target: {fileID: 213642122029010113, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: battlePointsText
+      value: 
+      objectReference: {fileID: 459918538}
+    - target: {fileID: 213642122029010113, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: cameraController
+      value: 
+      objectReference: {fileID: 967864213}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4475006401599613547, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: hpText
+      value: 
+      objectReference: {fileID: 1762460468}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: itemsChosen
+      value: 
+      objectReference: {fileID: 1767130394}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: skillChosen
+      value: 
+      objectReference: {fileID: 872276820}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: attackChosen
+      value: 
+      objectReference: {fileID: 1869531104}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: battleCanvas
+      value: 
+      objectReference: {fileID: 1382592461}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: escapeChosen
+      value: 
+      objectReference: {fileID: 178258819}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: unitNameText
+      value: 
+      objectReference: {fileID: 1858558061}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: actionPromptText
+      value: 
+      objectReference: {fileID: 1003936230}
+    - target: {fileID: 4908338929614626694, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: skillListController
+      value: 
+      objectReference: {fileID: 399443925}
+    - target: {fileID: 5625919756259725893, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_Name
+      value: BattleTurnManager
+      objectReference: {fileID: 0}
+    - target: {fileID: 5625919756259725893, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_TagString
+      value: Respawn
+      objectReference: {fileID: 0}
+    - target: {fileID: 5625919756259725893, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: bda398fc5306cff4ab5973e4c8a690fa, type: 3}
 --- !u!1 &4994775076405956987
 GameObject:
   m_ObjectHideFlags: 0
@@ -34777,6 +34941,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 2053019921}
     - target: {fileID: 3525406978313239132, guid: f100ebc1a024d134caaa083ee5873a66, type: 3}
+      propertyPath: chainRange
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3525406978313239132, guid: f100ebc1a024d134caaa083ee5873a66, type: 3}
       propertyPath: powerAPlus
       value: 2
       objectReference: {fileID: 0}
@@ -34864,6 +35032,10 @@ PrefabInstance:
       propertyPath: def
       value: 30
       objectReference: {fileID: 0}
+    - target: {fileID: 8727659566998241793, guid: f100ebc1a024d134caaa083ee5873a66, type: 3}
+      propertyPath: icon
+      value: 
+      objectReference: {fileID: 21300000, guid: 06665ca0eca081e4986caa4f24c7125a, type: 3}
     - target: {fileID: 8727659566998241793, guid: f100ebc1a024d134caaa083ee5873a66, type: 3}
       propertyPath: magicDef
       value: 30

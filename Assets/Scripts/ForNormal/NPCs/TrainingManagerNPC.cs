@@ -25,7 +25,7 @@ public class TrainingManagerNPC : ScenarioNPC
         {
             choices = new List<string>
             {
-                "A：挑战“狼兽”（触发“普通战斗”）",
+                "A：挑战“暴徒”（触发“普通战斗”）",
                 "B：挑战“凶恶巨兽”（触发“Boss战斗”）",
                 "C：还是算了（结束事件）"
             };
@@ -41,6 +41,9 @@ public class TrainingManagerNPC : ScenarioNPC
         {
             case 0:
                 ShowWorldPopup("即将开始：普通战斗（狼兽）", Color.yellow);
+                // 跳转到 SampleScene
+                UnityEngine.SceneManagement.SceneManager.LoadScene("SampleScene");
+                Debug.Log("加载场景 SampleScene 以进行普通战斗");
                 break;
             case 1:
                 ShowWorldPopup("即将开始：Boss战斗（凶恶巨兽）", Color.yellow);
