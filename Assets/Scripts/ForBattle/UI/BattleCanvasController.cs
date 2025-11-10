@@ -21,7 +21,7 @@ namespace Assets.Scripts.ForBattle.UI
         public GameObject UIs;
 
         public GameObject attackChosen;
-        public GameObject itemsChosen;
+        public GameObject swapChosen; // 原 itemsChosen 改为换人
         public GameObject escapeChosen;
         public GameObject skillChosen;
 
@@ -35,7 +35,7 @@ namespace Assets.Scripts.ForBattle.UI
         public enum BattleActionType : int
         {
             Attack = 0,
-            Item = 1,
+            Item = 1,   // 语义改为 换人，但保持索引兼容输入
             Escape = 2,
             Skill = 3,
         }
@@ -43,13 +43,15 @@ namespace Assets.Scripts.ForBattle.UI
         public void Refresh()
         {
             attackChosen.SetActive(false);
-            itemsChosen.SetActive(false);
+            if (swapChosen != null) swapChosen.SetActive(false);
             escapeChosen.SetActive(false);
             skillChosen.SetActive(false);
             if (Choice == BattleActionType.Attack)
                 attackChosen.SetActive(true);
             else if (Choice == BattleActionType.Item)
-                itemsChosen.SetActive(true);
+            {
+                if (swapChosen != null) swapChosen.SetActive(true);
+            }
             else if (Choice == BattleActionType.Escape)
                 escapeChosen.SetActive(true);
             else if (Choice == BattleActionType.Skill)
@@ -127,7 +129,7 @@ namespace Assets.Scripts.ForBattle.UI
                 else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.E))
                     SelectAction(BattleActionType.Skill);
                 else if (Input.GetKeyDown(KeyCode.Alpha3))
-                    SelectAction(BattleActionType.Item);
+                    SelectAction(BattleActionType.Item); // 换人
                 else if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Escape))
                     SelectAction(BattleActionType.Escape);
             }

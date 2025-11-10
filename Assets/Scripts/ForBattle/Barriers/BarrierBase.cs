@@ -62,7 +62,7 @@ namespace Assets.Scripts.ForBattle.Barriers
     {
         [Header("Barrier Settings")]
         [Tooltip("结界半径")] public float radius = 3f;
-        [Tooltip("持续回合数（与所有者绑定），>0 时在所有者的回合结束扣减直至清除")] public int durationTurns = 0;
+        [Tooltip("持续回合数（按拥有者回合递减）。默认值为 3 表示持续拥有者的三回合。若设置为 0 则为永久/无限时长。")] public int durationTurns = 3;
         [Tooltip("队伍过滤：All/Allies/Enemies（需要设置 owner）")] public BarrierTeamFilter teamFilter = BarrierTeamFilter.All;
         [Tooltip("结界拥有者（用于 Allies/Enemies 判定与回合计时）")] public BattleUnit owner;
 
@@ -144,13 +144,21 @@ namespace Assets.Scripts.ForBattle.Barriers
         private void HandleUnitTurnEnd(BattleUnit unit)
         {
             // 生命周期递减（仅所有者回合）
-            if (_turnsLeft >0 && owner != null && unit == owner)
-            { 
-                _turnsLeft--; 
-                if (_turnsLeft <=0) { Destroy(gameObject); return; } 
+            if (_turnsLeft > 0 && owner != null && unit == owner)
+            {
+                // If the owner's turn is an "extra" turn granted by the turn manager, do not consume duration
+                if (_turnManager != null && _turnManager.IsActiveExtraTurn(owner))
+                {
+                    // skip decrement for extra turns
+                }
+                else
+                {
+                    _turnsLeft--;
+                    if (_turnsLeft <= 0) { Destroy(gameObject); return; }
+                }
             }
             // 所有者被销毁则移除
-            if (owner == null && durationTurns >0) { Destroy(gameObject); return; }
+            if (owner == null && durationTurns > 0) { Destroy(gameObject); return; }
             //触发结界回合结束结算：默认仅对仍受影响的单位
             if (unit != null && IsUnitAffected(unit)) OnBarrierTurnEndResolve(unit);
         }
@@ -197,7 +205,7 @@ namespace Assets.Scripts.ForBattle.Barriers
                     }
                 }
             }
-            if (owner == null && durationTurns >0)
+            if (owner == null && durationTurns > 0)
             {
                 Destroy(gameObject);
             }

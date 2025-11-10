@@ -63,30 +63,63 @@ public class LuminaController : PlayerController
 
     protected override string GetSkillExtraInfo(int index)
     {
-        // 显示 BP 消耗与类型简述
+        // 显示 BP 消耗与类型简述（展示减免后的实时成本）
         if (phantasmTurns > 0)
         {
             switch (index)
             {
-                case 0: return $"魔法 光 威力A x{starlightPower:F2} | BP {GetCostByIndex(index)}"; // 星光射线
-                case 1: return $"魔法 光 扇形 x{wingLancePower:F2} | BP {GetCostByIndex(index)}"; // 羽翼之枪
-                case 2: return $"辅助 群体回避/会心+因果律 | BP {GetCostByIndex(index)}"; // 因果律预测
-                case 3: return $"光环 群体攻击+降消耗 | BP {GetCostByIndex(index)}"; // 天使赐福
-                case 4: return $"辅助结束幻化 | BP {GetCostByIndex(index)}"; //结束幻化
+                case 0: return $"魔法 光 威力A x{starlightPower:F2} | {FormatBpCost(GetBaseCostByIndex(index))}"; // 星光射线
+                case 1: return $"魔法 光 扇形 x{wingLancePower:F2} | {FormatBpCost(GetBaseCostByIndex(index))}"; // 羽翼之枪
+                case 2: return $"辅助 群体回避/会心+因果律 | {FormatBpCost(GetBaseCostByIndex(index))}"; // 因果律预测
+                case 3: return $"光环 群体攻击+降消耗 | {FormatBpCost(GetBaseCostByIndex(index))}"; // 天使赐福
+                case 4: return $"辅助结束幻化 | {FormatBpCost(GetBaseCostByIndex(index))}"; //结束幻化
             }
         }
         else
         {
             switch (index)
             {
-                case 0: return $"回复 群体 | BP {GetCostByIndex(index)}"; //纯白疗愈
-                case 1: return $"魔法 威力C+ x{powerCPlus:F2} | BP {GetCostByIndex(index)}"; // 虚化刃
-                case 2: return $"辅助 群体回避/会心+因果律 | BP {GetCostByIndex(index)}"; // 因果律预测
-                case 3: return $"领域 群体防御+缓回 | BP {GetCostByIndex(index)}"; // 水晶结界
-                case 4: return $"光环 幻化(4回合) | BP {GetCostByIndex(index)}"; // 幻化
+                case 0: return $"回复 群体 | {FormatBpCost(GetBaseCostByIndex(index))}"; //纯白疗愈
+                case 1: return $"魔法 威力C+ x{powerCPlus:F2} | {FormatBpCost(GetBaseCostByIndex(index))}"; // 虚化刃
+                case 2: return $"辅助 群体回避/会心+因果律 | {FormatBpCost(GetBaseCostByIndex(index))}"; // 因果律预测
+                case 3: return $"领域 群体防御+缓回 | {FormatBpCost(GetBaseCostByIndex(index))}"; // 水晶结界
+                case 4: return $"光环 幻化(4回合) | {FormatBpCost(GetBaseCostByIndex(index))}"; // 幻化
             }
         }
         return null;
+    }
+
+    private int GetBaseCostByIndex(int index)
+    {
+        if (phantasmTurns > 0)
+        {
+            switch (index)
+            {
+                case 0: return costPureHeal; // 星光射线沿用 costPureHeal
+                case 1: return costPhaseBlade; // 羽翼之枪沿用 costPhaseBlade
+                case 2: return costCausalityForecast;
+                case 3: return costCrystalField; // 赐福沿用水晶结界消耗
+                case 4: return costEndPhantasm;
+            }
+        }
+        else
+        {
+            switch (index)
+            {
+                case 0: return costPureHeal;
+                case 1: return costPhaseBlade;
+                case 2: return costCausalityForecast;
+                case 3: return costCrystalField;
+                case 4: return costPhantasm;
+            }
+        }
+        return 0;
+    }
+
+    private int GetCostByIndex(int index)
+    {
+        // 返回基础消耗；实际减免由 BattleTurnManager 按结界统一计算
+        return GetBaseCostByIndex(index);
     }
 
     protected override float GetSkillCastRange(int index)
@@ -169,9 +202,14 @@ public class LuminaController : PlayerController
                         break;
                     }
                 case 2: // 因果律预测：群体
+                    {
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, true, BattleIndicatorManager.Tags.SkillRange, true);
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, false, BattleIndicatorManager.Tags.SkillPreview, true, "Buff");
+                        break;
+                    }
                 case 3: // 天使赐福：群体
                     {
-                        indicatorManager.CreateCircleIndicator(center, castRange, true, true, BattleIndicatorManager.Tags.SkillRange, true, "Buff");
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, false, BattleIndicatorManager.Tags.SkillRange, true, "Holy");
                         break;
                     }
                 case 4: //结束幻化
@@ -183,10 +221,20 @@ public class LuminaController : PlayerController
             switch (index)
             {
                 case 0: //纯白疗愈：群体
+                    {
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, true, BattleIndicatorManager.Tags.SkillRange, true);
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, false, BattleIndicatorManager.Tags.SkillPreview, true, "Heal");
+                        break;
+                    }
                 case 2: // 因果律预测
+                    {
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, true, BattleIndicatorManager.Tags.SkillRange, true);
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, false, BattleIndicatorManager.Tags.SkillPreview, true, "Buff");
+                        break;
+                    }
                 case 3: // 水晶结界
                     {
-                        indicatorManager.CreateCircleIndicator(center, castRange, true, true, BattleIndicatorManager.Tags.SkillRange, true, "Heal");
+                        indicatorManager.CreateCircleIndicator(center, castRange, true, false, BattleIndicatorManager.Tags.SkillRange, true, "Crystal");
                         break;
                     }
                 case 1: // 虚化刃：单体近战
@@ -200,38 +248,6 @@ public class LuminaController : PlayerController
                     break;
             }
         }
-    }
-
-    private int GetCostByIndex(int index)
-    {
-        int baseCost = 0;
-        if (phantasmTurns > 0)
-        {
-            switch (index)
-            {
-                case 0: baseCost = costPureHeal; break; // 星光射线 替换纯白疗愈（沿用costPureHeal）
-                case 1: baseCost = costPhaseBlade; break; // 羽翼之枪 替换虚化刃（沿用costPhaseBlade）
-                case 2: baseCost = costCausalityForecast; break; // 因果律预测
-                case 3: baseCost = costCrystalField; break; // 天使赐福 替换水晶结界（沿用costCrystalField）
-                case 4: baseCost = costEndPhantasm; break; //结束幻化
-            }
-        }
-        else
-        {
-            switch (index)
-            {
-                case 0: baseCost = costPureHeal; break;
-                case 1: baseCost = costPhaseBlade; break;
-                case 2: baseCost = costCausalityForecast; break;
-                case 3: baseCost = costCrystalField; break;
-                case 4: baseCost = costPhantasm; break;
-            }
-        }
-        if (angelBlessingTurns > 0)
-        {
-            baseCost = Mathf.Max(0, baseCost - angelBlessingBPCostReduction);
-        }
-        return baseCost;
     }
 
     private int CalcMagicDamage(float powerMul)

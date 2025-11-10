@@ -7,6 +7,7 @@ using TMPro;
 using System; // 为事件 Action
 using UnityEngine.SceneManagement; // 场景跳转
 using Assets.Scripts.ForBattle.Barriers; //结界系统
+using Assets.Scripts.ForBattle.Audio;
 
 public class BattleTurnManager : MonoBehaviour
 {
@@ -36,10 +37,22 @@ public class BattleTurnManager : MonoBehaviour
     public int actionPointThreshold =100;
     public float tickInterval =0.1f; // seconds per AP accumulation tick
 
+    [Header("Camera Focus Settings")]
+    [Tooltip("当多个单位同时达到行动阈值时，只对第一个单位执行镜头平滑聚焦，后续单位复用该视角，避免快速抖动。")] public bool focusFirstReadyUnitOnlyPerBatch = true;
+    [Tooltip("始终确保玩家单位开始行动时获得镜头焦点，即使本批次已有其他单位获取过焦点。")] public bool alwaysFocusPlayerUnits = true;
+
     private Coroutine turnCoroutine = null;
 
     // track previous unit to enable smooth transition
     private BattleUnit previousUnit = null;
+
+    // Optional per-unit initial act point to assign after they finish a turn (used to grant immediate extra action)
+    private class InitialActInfo { public int actPoint; public bool isExtra; }
+    private Dictionary<BattleUnit, InitialActInfo> initialActPointForUnit = new Dictionary<BattleUnit, InitialActInfo>();
+    // Tracks units whose next turn is marked as an "extra" turn (won't grant auto BP on start)
+    private HashSet<BattleUnit> extraTurnPending = new HashSet<BattleUnit>();
+    // Tracks units that are currently executing an extra turn (should not decrement barrier durations)
+    private HashSet<BattleUnit> activeExtraTurns = new HashSet<BattleUnit>();
 
     // ===== 行动条事件 =====
     /// <summary>
@@ -63,14 +76,28 @@ public class BattleTurnManager : MonoBehaviour
         this.status = BattleStatus.Battle;
         battlePoints =0;
         UpdateBattlePointsUI();
+        // play battle BGM loop when battle starts
+        if (SfxPlayer.Instance != null)
+        {
+            SfxPlayer.Instance.PlayLoop("battle1");
+        }
     }
     public void EndBattle()
     {
         this.status = BattleStatus.Idle;
+        // stop battle BGM when battle ends
+        if (SfxPlayer.Instance != null)
+        {
+            SfxPlayer.Instance.StopLoop("battle1");
+        }
     }
     // Start is called before the first frame update
     public void AddUnitToTurnOrder(BattleUnit unit)
     {
+        if (unit == null) return;
+        // Do not add units that are not currently on battle (on bench)
+        var pc = unit.controller as PlayerController;
+        if (pc != null && !pc.isOnBattle) return;
         if (turnOrder == null) turnOrder = new BattleUnitPriorityQueue();
         turnOrder.Add(unit);
     }
@@ -105,29 +132,27 @@ public class BattleTurnManager : MonoBehaviour
     /// </summary>
     private int FastForwardTicksToNextAction()
     {
-        if (turnOrder == null || turnOrder.Count ==0) return 0;
+        if (turnOrder == null || turnOrder.Count == 0) return 0;
+
+        // Ensure dead units are removed/destroyed before computing ticks
+        RemoveDeadUnits();
 
         int minTicks = int.MaxValue;
         var units = turnOrder.GetAll();
         foreach (var u in units)
         {
-            if(u.battleHp <=0)
-            {
-                u.EndBattle();
-                turnOrder.Remove(u);
-            }
             if (u == null) continue;
             int perTick = Mathf.Max(1, Mathf.RoundToInt(u.battleSpd * tickInterval));
             if (u.battleActPoint >= actionPointThreshold)
             {
-                minTicks =0;
+                minTicks = 0;
                 break;
             }
             int need = Mathf.CeilToInt((actionPointThreshold - u.battleActPoint) / (float)perTick);
             if (need < minTicks) minTicks = need;
         }
 
-        if (minTicks == int.MaxValue || minTicks <=0) return 0;
+        if (minTicks == int.MaxValue || minTicks <= 0) return 0;
 
         // apply bulk increment
         foreach (var u in units)
@@ -175,7 +200,8 @@ public class BattleTurnManager : MonoBehaviour
 
             //可能有多个单位同时达到阈值，依次处理全部，避免玩家回合被跳过
             bool processedAny = false;
-            while (turnOrder.Count >0)
+            bool cameraFocusedThisBatch = false; // 防抖：同一批只聚焦一次（可被玩家单位覆盖）
+            while (turnOrder.Count > 0)
             {
                 BattleUnit currentUnit = turnOrder.Peek();
                 if (currentUnit == null || currentUnit.battleActPoint < actionPointThreshold) break; // 无更多就绪单位
@@ -184,7 +210,21 @@ public class BattleTurnManager : MonoBehaviour
 
                 processedAny = true;
                 currentUnit.Flush();
-                if (currentUnit.unitType == BattleUnitType.Player) battlePoints +=1;
+                // Grant BP on player turn start unless this turn was flagged as an extra turn
+                if (currentUnit.unitType == BattleUnitType.Player)
+                {
+                    if (extraTurnPending.Contains(currentUnit))
+                    {
+                        // consume the extra-turn flag and do not award BP
+                        extraTurnPending.Remove(currentUnit);
+                        // mark this unit as currently executing an extra turn so barriers don't consume a duration
+                        activeExtraTurns.Add(currentUnit);
+                    }
+                    else
+                    {
+                        battlePoints = Mathf.Min(battlePoints + 1, battlePointsMax);
+                    }
+                }
                 UpdateBattlePointsUI();
 
                 Debug.Log("当前行动单位: " + currentUnit.unitName);
@@ -195,32 +235,36 @@ public class BattleTurnManager : MonoBehaviour
                 // 显示移动范围
                 if (indicatorManager != null)
                 {
-                    float moveRange =0f;
+                    float moveRange = 0f;
                     var pc = currentUnit.controller as PlayerController;
-                    moveRange = pc != null ? pc.moveRange :3f;
-                    Vector3 origin = currentUnit.transform.position + Vector3.up *0.5f;
+                    moveRange = pc != null ? pc.moveRange : 3f;
+                    Vector3 origin = currentUnit.transform.position + Vector3.up * 0.5f;
                     RaycastHit hit;
-                    Vector3 circleCenter = Physics.Raycast(origin, Vector3.down, out hit,5f)
-                        ? hit.point + Vector3.up *0.01f
-                        : new Vector3(currentUnit.transform.position.x,0f +0.01f, currentUnit.transform.position.z);
+                    Vector3 circleCenter = Physics.Raycast(origin, Vector3.down, out hit, 5f)
+                        ? hit.point + Vector3.up * 0.01f
+                        : new Vector3(currentUnit.transform.position.x, 0f + 0.01f, currentUnit.transform.position.z);
                     indicatorManager.CreateCircleIndicator(circleCenter, moveRange, true, true, BattleIndicatorManager.Tags.MovementRange, true);
                 }
 
                 // 相机与控制器执行
                 if (cameraController != null)
                 {
-                    Vector3 desiredOffset = new Vector3(0f,1.2f, -3f);
-                    if (previousUnit != null && previousUnit != currentUnit)
-                    {
-                        Transform fromT = previousUnit.cameraRoot != null ? previousUnit.cameraRoot : previousUnit.transform;
-                        Transform toT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
-                        yield return StartCoroutine(cameraController.TransitionToTarget(fromT, toT, desiredOffset, cameraController.transitionDuration));
-                    }
-                    else
+                    bool allowFocus = !focusFirstReadyUnitOnlyPerBatch || !cameraFocusedThisBatch || (alwaysFocusPlayerUnits && currentUnit.unitType == BattleUnitType.Player);
+                    if (allowFocus)
                     {
                         Transform toT = currentUnit.cameraRoot != null ? currentUnit.cameraRoot : currentUnit.transform;
-                        cameraController.FocusImmediate(toT, desiredOffset);
-                        yield return new WaitForSeconds(cameraController.blendTime);
+                        if (previousUnit != null && previousUnit != currentUnit)
+                        {
+                            // 使用立即聚焦，减少旧目标残留；如果需要平滑过渡可改回 Transition
+                            cameraController.ForceFocusTarget(toT, true);
+                        }
+                        else
+                        {
+                            cameraController.ForceFocusTarget(toT, true);
+                            yield return new WaitForSeconds(cameraController.switchTransitionTime * 0.25f);
+                        }
+                        // 标记本批次已聚焦（玩家单位强制聚焦不影响后续玩家再次聚焦，因为条件中包含 alwaysFocusPlayerUnits）
+                        cameraFocusedThisBatch = true;
                     }
 
                     cameraController.EnableMouseControl(true);
@@ -244,21 +288,33 @@ public class BattleTurnManager : MonoBehaviour
                 }
 
                 // 扣除行动点并触发结束事件
-                currentUnit.battleActPoint = Mathf.Max(0, currentUnit.battleActPoint - actionPointThreshold);
+                currentUnit.battleActPoint = Math.Max(0, currentUnit.battleActPoint - actionPointThreshold);
                 OnUnitTurnEnd?.Invoke(currentUnit);
 
-                //触发所有结界的“回合结束结算”
+                //结界回合结束结算
                 foreach (var barrier in BarrierBase.ActiveBarriers)
                 {
                     if (barrier == null) continue;
                     barrier.ForceTurnEndResolve(currentUnit);
                 }
 
-                // 清理临时指示与排序（保留结界指示器）
+                // 如果有为该单位预设的初始行动点（例如释放结界后），应用它以便可能立即再次行动
+                if (initialActPointForUnit.TryGetValue(currentUnit, out InitialActInfo initInfo))
+                {
+                    currentUnit.battleActPoint = initInfo.actPoint;
+                    // 标记为额外回合的单位在下一回合开始时将不会获得自动BP
+                    if (initInfo.isExtra) extraTurnPending.Add(currentUnit);
+                    initialActPointForUnit.Remove(currentUnit);
+                }
+
+                // 清理临时指示
                 if (indicatorManager != null)
                 {
-                    if (indicatorManager != null) indicatorManager.ClearEphemeralIndicators();
+                    indicatorManager.ClearEphemeralIndicators();
                 }
+                // Clear active extra turn marker for this unit if it was set
+                if (activeExtraTurns.Contains(currentUnit)) activeExtraTurns.Remove(currentUnit);
+
                 turnOrder.Sort();
                 previousUnit = currentUnit;
                 actingUnit = null; // 回合结束清空
@@ -267,24 +323,9 @@ public class BattleTurnManager : MonoBehaviour
             // 若没有任何单位处理，做一个最小等待避免死循环占用 CPU
             if (!processedAny) yield return new WaitForSeconds(tickInterval);
 
-            // ===== 回合循环末尾：清理死亡单位 =====
-            // 检查所有 BattleUnit，若血量<=0 则销毁并移出行动队列
-            var allUnitsInScene = GameObject.FindObjectsOfType<BattleUnit>();
-            if (allUnitsInScene != null && allUnitsInScene.Length >0)
-            {
-                foreach (var u in allUnitsInScene)
-                {
-                    if (u == null) continue;
-                    if (u.battleHp <=0)
-                    {
-                        // 从队列移除并销毁
-                        if (turnOrder != null) turnOrder.Remove(u);
-                        u.EndBattle();
-                    }
-                }
-                //重新排序以反映队列更新
-                if (turnOrder != null) turnOrder.Sort();
-            }
+            // ===== 回合循环末尾：统一清理死亡单位（跳过不在战斗的己方备战角色） =====
+            RemoveDeadUnits();
+
             // ===== 胜利检测：无敌方单位则结束战斗并跳回 Scenario 场景 =====
             bool anyEnemy = false;
             foreach (var u in GameObject.FindObjectsOfType<BattleUnit>())
@@ -299,6 +340,37 @@ public class BattleTurnManager : MonoBehaviour
                 if (indicatorManager != null) indicatorManager.ClearAll();
                 if (Application.isPlaying)
                 {
+                    SfxPlayer.Instance.StopLoop("battle1");
+                    try { global::UnityEngine.SceneManagement.SceneManager.LoadScene("Scenario"); }
+                    catch (System.Exception ex) { Debug.LogWarning("加载 Scenario 场景失败: " + ex.Message); }
+                }
+                break; //退出循环
+            }
+
+            // 失败检测：仅检测场上（isOnBattle==true）的玩家单位是否全部阵亡。若场上所有上阵玩家血量均为0，则判定战斗失败
+            bool anyPlayerAlive = false;
+            var pcs = GameObject.FindObjectsOfType<PlayerController>();
+            foreach (var pc in pcs)
+            {
+                if (pc == null) continue;
+                if (pc.unit == null) continue;
+                // only consider units that are currently on-battle
+                if (!pc.isOnBattle) continue;
+                if (pc.unit.battleHp > 0)
+                {
+                    anyPlayerAlive = true;
+                    break;
+                }
+            }
+            if (!anyPlayerAlive)
+            {
+                Debug.Log("所有玩家单位阵亡，战斗失败，返回 Scenario 场景。");
+                EndBattle();
+                status = BattleStatus.Idle;
+                if (indicatorManager != null) indicatorManager.ClearAll();
+                if (Application.isPlaying)
+                {
+                    SfxPlayer.Instance.StopLoop("battle1");
                     try { global::UnityEngine.SceneManagement.SceneManager.LoadScene("Scenario"); }
                     catch (System.Exception ex) { Debug.LogWarning("加载 Scenario 场景失败: " + ex.Message); }
                 }
@@ -324,6 +396,46 @@ public class BattleTurnManager : MonoBehaviour
     public void Flush()
     {
         if (turnOrder != null) turnOrder.Clear();
+    }
+
+    // Allow external callers (e.g. CeliaController) to set an initial action point for a unit
+    // that will be applied immediately after the unit's current turn ends, enabling an immediate extra action.
+    // If isExtra==true the next turn taken by the unit will be considered an "extra turn" and will not grant auto BP.
+    public void SetInitialActPointForUnit(BattleUnit unit, int actPointValue, bool isExtra = false)
+    {
+        if (unit == null) return;
+        var info = new InitialActInfo { actPoint = actPointValue, isExtra = isExtra };
+        initialActPointForUnit[unit] = info;
+    }
+
+    // Centralized removal of dead units: remove from turnOrder, invoke EndBattle and destroy GameObject
+    private void RemoveDeadUnits()
+    {
+        var all = GameObject.FindObjectsOfType<BattleUnit>();
+        if (all == null || all.Length == 0) return;
+        foreach (var u in all)
+        {
+            if (u == null) continue;
+            if (u.battleHp <= 0)
+            {
+                // Skip bench (not on-battle) player characters to avoid removing uninitialized off-battle units
+                var pc = u.controller as PlayerController;
+                if (pc != null && !pc.isOnBattle) continue;
+
+                if (turnOrder != null) turnOrder.Remove(u);
+                try
+                {
+                    u.EndBattle();
+                }
+                catch { }
+                // Destroy the GameObject to ensure it no longer participates
+                if (u.gameObject != null)
+                {
+                    Destroy(u.gameObject);
+                }
+            }
+        }
+        if (turnOrder != null) turnOrder.Sort();
     }
 
     // Update is called once per frame
@@ -394,6 +506,16 @@ public class BattleTurnManager : MonoBehaviour
         Debug.Log($"[BattleTurnManager] 战技点 消耗 {adj}(原始:{amount})，剩余 {battlePoints}/{battlePointsMax}");
         UpdateBattlePointsUI();
         return true;
+    }
+    /// <summary>
+    /// Returns true if the provided unit is currently executing an extra turn (i.e., its turn was scheduled
+    /// via SetInitialActPointForUnit with isExtra==true and has not yet completed). Used by barriers to skip
+    /// decrementing duration during extra turns.
+    /// </summary>
+    public bool IsActiveExtraTurn(BattleUnit unit)
+    {
+        if (unit == null) return false;
+        return activeExtraTurns != null && activeExtraTurns.Contains(unit);
     }
     private void UpdateBattlePointsUI()
     {

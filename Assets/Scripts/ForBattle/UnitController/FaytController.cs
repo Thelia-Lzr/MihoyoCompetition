@@ -46,12 +46,12 @@ public class FaytController : PlayerController
         // 显示威力评级 + 战技点消耗
         switch (index)
         {
-            case 0: return $"威力B x{powerB:F2} | BP {costBackstab}";
-            case 1: return $"威力C x{powerC:F2} | BP {costRendCombo}";
-            case 2: return $"辅助 | BP {costShadowEye}";
-            case 3: return $"威力B+ x{powerBPlus:F2} | BP {costWaterSweep}";
-            case 4: return $"威力A+ x{powerAPlus:F2} | BP {costRotaryAssault}";
-            case 5: return $"辅助 | BP {costLateAdvantage}";
+            case 0: return $"威力B x{powerB:F2} | {FormatBpCost(costBackstab)}";
+            case 1: return $"威力C x{powerC:F2} | {FormatBpCost(costRendCombo)}";
+            case 2: return $"辅助 | {FormatBpCost(costShadowEye)}";
+            case 3: return $"威力B+ x{powerBPlus:F2} | {FormatBpCost(costWaterSweep)}";
+            case 4: return $"威力A+ x{powerAPlus:F2} | {FormatBpCost(costRotaryAssault)}";
+            case 5: return $"辅助 | {FormatBpCost(costLateAdvantage)}";
         }
         return null;
     }
@@ -73,6 +73,12 @@ public class FaytController : PlayerController
         return base.GetSkillCastRange(index);
     }
 
+    // 标记单体技能，使基类的单体目标循环与指示器逻辑生效
+    protected override bool IsSkillSingleTarget(int index)
+    {
+        return index == 0 || index == 1 || index == 4; // 三个近战单体技能
+    }
+
     protected override void ShowSkillPreview(int index)
     {
         if (indicatorManager == null) return;
@@ -88,8 +94,7 @@ public class FaytController : PlayerController
 
         if (index == 0 || index == 1 || index == 4)
         {
-            // 单体近战：高亮最近有效目标（近战范围内）
-            BattleUnit target = FindNearestInRange(meleeRange);
+            // 近战单体技能显示自身的近战范围圈；目标标记交给基类逻辑处理
             float castRange = GetSkillCastRange(index);
             if (indicatorManager != null)
             {
@@ -107,17 +112,8 @@ public class FaytController : PlayerController
                 }
                 else
                 {
-                    //center = GetGroundPosition(transform.position);
                     indicatorManager.UpdateCircleIndicator(skillRangeIndicator, center, castRange, true);
                 }
-            }
-            if (target != null)
-            {
-                indicatorManager.CreateTargetMarker(target.transform, true);
-            }
-            else
-            {
-                indicatorManager.ClearTargetMarkers();
             }
         }
         else if (index == 3)
@@ -132,14 +128,7 @@ public class FaytController : PlayerController
                 BattleIndicatorManager.Tags.SkillPreview,
                 true,
                 "Water");
-            skillRangeIndicator = indicatorManager.CreateCircleIndicator(
-                    center,
-                    castRange,
-                    true,
-                    true,
-                    BattleIndicatorManager.Tags.SkillRange,
-                    true
-                    );
+            
 
             //取摄像机前向并投影到水平面作为朝向
             Camera cam = Camera.main ?? (Camera.allCamerasCount > 0 ? Camera.allCameras[0] : null);
@@ -209,13 +198,11 @@ public class FaytController : PlayerController
     protected override IEnumerator TryQuickCastSkill(int index)
     {
         var tm = FindObjectOfType<BattleTurnManager>();
-        int cost = GetCostByIndex(index);
-        if (tm != null && !tm.CanSpendBattlePoints(cost))
+        int baseCost = GetCostByIndex(index);
+        int effCost = GetEffectiveBpCost(baseCost);
+        if (tm != null && !tm.CanSpendBattlePoints(baseCost))
         {
-            if (sfxPlayer != null) sfxPlayer.Play("Error");
-            skillReselectRequested = true;
-            yield break;
-            //return false;
+            if (tm != null && !tm.CanSpendBattlePoints(effCost)) { sfxPlayer?.Play("Error"); skillReselectRequested = true; yield break; }
         }
 
         Camera cam = Camera.main;
@@ -230,17 +217,12 @@ public class FaytController : PlayerController
                         if (sfxPlayer != null) sfxPlayer.Play("Error");
                         skillReselectRequested = true;
                         yield break;
-                        //return false;
                     }
-                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                    if (!tm.TrySpendBattlePoints(baseCost)) { sfxPlayer?.Play("Error"); skillReselectRequested = true; yield break; }
                     int dmg = CalcDamage(powerB);
                     if (IsBehind(target)) dmg *= 2;
                     skillSystem?.CauseDamage(target, unit, dmg, DamageType.Physics);
-                    sfxPlayer.Play("cut");
-                    skillReselectRequested = false;
-                    yield return new WaitForSeconds(0.4f);
-                    yield break;
-                    //return true;
+                    sfxPlayer?.Play("cut"); skillReselectRequested = false; yield return new WaitForSeconds(0.4f); yield break;
                 }
             case 1: // 撕裂连击：单体近战，两段，侧面额外提升（以伤害加作为例）
                 {
@@ -252,22 +234,18 @@ public class FaytController : PlayerController
                         skillReselectRequested = true;
                         yield break;
                     }
-                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                    if (!tm.TrySpendBattlePoints(baseCost)) { sfxPlayer?.Play("Error"); skillReselectRequested = true; yield break; }
                     float bonus = IsSide(target) ? 1.25f : 1f;
                     int hit1 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
                     int hit2 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
                     skillSystem?.CauseDamage(target, unit, hit1, DamageType.Physics);
-                    sfxPlayer.Play("cut");
-                    yield return new WaitForSeconds(0.4f);
+                    sfxPlayer?.Play("cut"); yield return new WaitForSeconds(0.4f);
                     skillSystem?.CauseDamage(target, unit, hit2, DamageType.Physics);
-                    sfxPlayer.Play("cut");
-                    skillReselectRequested = false;
-                    yield break;
-                    //return true;
+                    sfxPlayer?.Play("cut"); skillReselectRequested = false; yield break;
                 }
             case 2: // 暗影之眼：自身增益与隐身（这里以日志提示为主）
                 {
-                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                    if (!tm.TrySpendBattlePoints(baseCost)) { sfxPlayer?.Play("Error"); skillReselectRequested = true; yield break; }
                     Debug.Log("[Fayt] 暗影之眼：攻击上升并获得隐身（占位实现）");
                     //unit.battleAtk = Mathf.RoundToInt(unit.battleAtk * 1.2f); // 提高20%攻击力（占位实现）
                     unit.faytUpAtk = 3;
@@ -275,11 +253,10 @@ public class FaytController : PlayerController
                     // TODO: 接入状态系统：提高攻击、设置隐身标记
                     skillReselectRequested = false;
                     yield break;
-                    //return true;
                 }
             case 3: // 流水横扫：扇形范围群体伤害并降防
                 {
-                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                    if (!tm.TrySpendBattlePoints(baseCost)) { sfxPlayer?.Play("Error"); skillReselectRequested = true; yield break; }
                     int applied = 0;
                     Vector3 origin = transform.position;
                     // 使用镜头方向作为朝向（使用外层 cam变量）
@@ -309,7 +286,6 @@ public class FaytController : PlayerController
                     Debug.Log($"[Fayt] 流水横扫 命中 {applied} 个目标");
                     skillReselectRequested = false;
                     yield break;
-                    //return true;
                 }
             case 4: //轮转强袭：单体近战大伤害
                 {
@@ -320,34 +296,25 @@ public class FaytController : PlayerController
                         if (sfxPlayer != null) sfxPlayer.Play("Error");
                         skillReselectRequested = true;
                         yield break;
-                        //return false;
                     }
-                    if (tm != null && !tm.TrySpendBattlePoints(cost)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
+                    if (!tm.TrySpendBattlePoints(baseCost)) { sfxPlayer?.Play("Error"); skillReselectRequested = true; yield break; }
                     skillSystem?.CauseDamage(target, unit, CalcDamage(powerAPlus), DamageType.Physics);
                     skillReselectRequested = false;
                     yield break;
-                    //return true;
                 }
             case 5: // 后发优势：损失一半生命，回复4BP
                 {
-                    if (tm != null)
-                    {
-                        int half = Mathf.Max(1, unit.battleHp / 2);
-                        skillSystem.CauseDamage(unit, unit, half, DamageType.True);
-                        //unit.battleHp = Mathf.Max(1, unit.battleHp - half);
-                        tm.AddBattlePoints(4);
-                        skillReselectRequested = false;
-                        yield break;
-                        //return true;
-                    }
-                    if (sfxPlayer != null) sfxPlayer.Play("Error");
-                    skillReselectRequested = true;
+                    if (!tm.TrySpendBattlePoints(baseCost)) { sfxPlayer?.Play("Error"); skillReselectRequested = true; yield break; }
+                    int half = Mathf.Max(1, unit.battleHp / 2);
+                    skillSystem?.CauseDamage(unit, unit, half, DamageType.True);
+                    //unit.battleHp = Mathf.Max(1, unit.battleHp - half);
+                    tm.AddBattlePoints(4);
+                    skillReselectRequested = false;
                     yield break;
-                    //return false;
                 }
-
         }
-        //return false;
+
+        sfxPlayer?.Play("Error"); skillReselectRequested = true; yield break;
     }
 
     private BattleUnit RaycastUnitUnderCursor(Camera cam)
@@ -360,116 +327,4 @@ public class FaytController : PlayerController
         }
         return null;
     }
-
-    //protected override IEnumerator ExecuteSkillByIndex(int index)
-    //{
-    //    switch (index)
-    //    {
-    //        case 0: yield return SkillBackstab(); break;
-    //        case 1: yield return SkillRendCombo(); break;
-    //        case 2: yield return SkillShadowEye(); break;
-    //        case 3: yield return SkillWaterSweep(); break;
-    //        case 4: yield return SkillRotaryAssault(); break;
-    //        case 5: yield return SkillLateAdvantage(); break;
-    //        default:
-    //            Debug.LogWarning($"FaytController: invalid skill index {index}");
-    //            break;
-    //    }
-    //}
-
-    //private IEnumerator SkillBackstab()
-    //{
-    //    var tm = FindObjectOfType<BattleTurnManager>();
-    //    if (tm != null && !tm.CanSpendBattlePoints(costBackstab)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
-    //    yield return UseTargetSelection(meleeRange, (target) =>
-    //    {
-    //        if (target == null) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-    //        if (tm != null && !tm.TrySpendBattlePoints(costBackstab)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-    //        int dmg = CalcDamage(powerB);
-    //        if (IsBehind(target)) dmg *= 2;
-    //        skillSystem?.CauseDamage(target, unit, dmg, DamageType.Physics);
-    //    });
-    //    yield return new WaitForSeconds(0.4f);
-    //}
-
-    //private IEnumerator SkillRendCombo()
-    //{
-    //    var tm = FindObjectOfType<BattleTurnManager>();
-    //    if (tm != null && !tm.CanSpendBattlePoints(costRendCombo)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
-    //    yield return UseTargetSelection(meleeRange, (target) =>
-    //    {
-    //        if (target == null) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-    //        if (tm != null && !tm.TrySpendBattlePoints(costRendCombo)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-    //        float bonus = IsSide(target) ? 1.25f : 1f;
-    //        int hit1 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
-    //        int hit2 = Mathf.RoundToInt(CalcDamage(powerC) * bonus);
-    //        skillSystem?.CauseDamage(target, unit, hit1, DamageType.Physics);
-    //        skillSystem?.CauseDamage(target, unit, hit2, DamageType.Physics);
-    //    });
-    //    yield return new WaitForSeconds(0.5f);
-    //}
-
-    //private IEnumerator SkillShadowEye()
-    //{
-    //    var tm = FindObjectOfType<BattleTurnManager>();
-    //    if (tm != null && !tm.TrySpendBattlePoints(costShadowEye)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
-    //    unit.battleAtk = Mathf.RoundToInt(unit.battleAtk * 1.2f); // 提高20%攻击力（占位实现）
-    //    Debug.Log("[Fayt] 暗影之眼：攻击上升并获得隐身（占位实现）");
-    //    yield return new WaitForSeconds(0.3f);
-    //}
-
-    //private IEnumerator SkillWaterSweep()
-    //{
-    //    var tm = FindObjectOfType<BattleTurnManager>();
-    //    if (tm != null && !tm.CanSpendBattlePoints(costWaterSweep)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
-
-    //    // 使用方向选择来确定扇形朝向
-    //    yield return UseDirectionSelection((dir) =>
-    //    {
-    //        if (tm != null && !tm.TrySpendBattlePoints(costWaterSweep)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-    //        int applied = 0;
-    //        Vector3 origin = transform.position;
-    //        foreach (var u in FindObjectsOfType<BattleUnit>())
-    //        {
-    //            if (!IsValidTarget(u)) continue;
-    //            Vector3 v = (u.transform.position - origin); v.y = 0f;
-    //            if (v.magnitude <= waterSweepRadius)
-    //            {
-    //                float ang = Vector3.Angle(dir, v.normalized);
-    //                if (ang <= waterSweepAngle * 0.5f)
-    //                {
-    //                    skillSystem?.CauseDamage(u, unit, CalcDamage(powerBPlus), DamageType.Physics);
-    //                    u.battleDef = Mathf.Max(0, u.battleDef - 10);
-    //                    applied++;
-    //                }
-    //            }
-    //        }
-    //        Debug.Log($"[Fayt] 流水横扫 命中 {applied} 个目标");
-    //    });
-    //    yield return new WaitForSeconds(0.6f);
-    //}
-
-    //private IEnumerator SkillRotaryAssault()
-    //{
-    //    var tm = FindObjectOfType<BattleTurnManager>();
-    //    if (tm != null && !tm.CanSpendBattlePoints(costRotaryAssault)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; yield break; }
-    //    yield return UseTargetSelection(meleeRange, (target) =>
-    //    {
-    //        if (target == null) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-    //        if (tm != null && !tm.TrySpendBattlePoints(costRotaryAssault)) { if (sfxPlayer != null) sfxPlayer.Play("Error"); skillReselectRequested = true; return; }
-    //        skillSystem?.CauseDamage(target, unit, CalcDamage(powerAPlus), DamageType.Physics);
-    //    });
-    //    yield return new WaitForSeconds(0.5f);
-    //}
-
-    //private IEnumerator SkillLateAdvantage()
-    //{
-    //    var tm = FindObjectOfType<BattleTurnManager>();
-    //    if (tm == null) yield break;
-    //    int half = Mathf.Max(1, unit.battleMaxHp / 2);
-    //    unit.battleHp = Mathf.Max(1, unit.battleHp - half);
-    //    tm.AddBattlePoints(4);
-    //    Debug.Log("[Fayt] 后发优势：损失一半生命，回复4BP");
-    //    yield return new WaitForSeconds(0.3f);
-    //}
 }

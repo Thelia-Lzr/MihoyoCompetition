@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Assets.Scripts.ForBattle.Indicators
 {
     /// <summary>
-    /// 战斗范围指示器管理：负责创建/更新/清理各种形状的范围提示
+    /// 战斗范围指示管理：创建/更新/清理各种形状的范围显示
     /// </summary>
     public class BattleIndicatorManager : MonoBehaviour
     {
@@ -44,6 +44,7 @@ namespace Assets.Scripts.ForBattle.Indicators
             public const string AreaSelection = "AreaSelection";
             public const string DirectionSelection = "DirectionSelection";
             public const string TargetMarker = "TargetMarker";
+            public const string Chant = "Chant"; // persistent magic chant indicator
             public const string Barrier = "Barrier"; //结界指示器标签
             public const string ChainCircle = "ChainCircle"; // 连携蓝圈
             public const string None = "";
@@ -97,26 +98,58 @@ namespace Assets.Scripts.ForBattle.Indicators
             if (indicator == null) return;
 
             var lineRenderers = indicator.GetComponentsInChildren<LineRenderer>(true);
-            if (lineRenderers != null && lineRenderers.Length >0)
+            if (lineRenderers != null && lineRenderers.Length > 0)
             {
                 foreach (var lr in lineRenderers)
                 {
                     lr.startColor = color;
                     lr.endColor = color;
+                    EnsureMaterialSupportsAlpha(lr.material, color);
                 }
             }
 
             var renderers = indicator.GetComponentsInChildren<Renderer>(true);
-            if (renderers != null && renderers.Length >0)
+            if (renderers != null && renderers.Length > 0)
             {
                 foreach (var rend in renderers)
                 {
                     if (rend.material != null)
                     {
                         rend.material.color = color;
+                        EnsureMaterialSupportsAlpha(rend.material, color);
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 若颜色是半透明（alpha<0.99）则确保材质支持透明渲染（切换到 Sprite/Default 或配置混合）。
+        /// </summary>
+        private void EnsureMaterialSupportsAlpha(Material mat, Color col)
+        {
+            if (mat == null) return;
+            if (col.a >= 0.99f) return; // 近乎不透明，无需特殊处理
+
+            // 若当前 Shader 不支持透明，则切换到 Sprites/Default
+            var name = mat.shader != null ? mat.shader.name : string.Empty;
+            if (!(name.Contains("Sprite") || name.Contains("Unlit")))
+            {
+                var spriteShader = Shader.Find("Sprites/Default");
+                if (spriteShader != null)
+                {
+                    mat.shader = spriteShader;
+                }
+            }
+
+            // 标准透明混合设置
+            if (mat.HasProperty("_SrcBlend")) mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            if (mat.HasProperty("_DstBlend")) mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 0);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.EnableKeyword("_ALPHABLEND_ON");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            // 设定一个较高的队列值以确保在地面之上（如与其他透明对象排序可再调整）
+            mat.renderQueue = 3000;
         }
 
         // 新增：公开的重着色接口，允许外部（如结界）动态修改已有指示器的颜色
@@ -923,6 +956,35 @@ namespace Assets.Scripts.ForBattle.Indicators
             return Tags.None;
         }
 
+        /// <summary>
+        /// Change the tag associated with an existing indicator GameObject.
+        /// This moves the indicator from its previous tracking bucket to the new one
+        /// and reapplies layering rules for the new tag.
+        /// </summary>
+        public void ChangeIndicatorTag(GameObject indicator, string newTag)
+        {
+            if (indicator == null) return;
+            string oldTag = GetTagForIndicator(indicator);
+            if (oldTag == newTag) return;
+
+            // remove from old tag list
+            if (!string.IsNullOrEmpty(oldTag) && taggedIndicators.TryGetValue(oldTag, out var oldList))
+            {
+                oldList.Remove(indicator);
+            }
+
+            // add to new tag list
+            if (string.IsNullOrEmpty(newTag)) newTag = Tags.None;
+            if (!taggedIndicators.TryGetValue(newTag, out var newList))
+            {
+                newList = new List<GameObject>();
+                taggedIndicators[newTag] = newList;
+            }
+            if (!newList.Contains(indicator)) newList.Add(indicator);
+
+            // reapply layering for the indicator under the new tag
+            ApplyLayering(indicator, newTag);
+        }
         private float RegisterBarrier(GameObject indicator)
         {
             if (indicator == null) return barrierBaseYOffset;

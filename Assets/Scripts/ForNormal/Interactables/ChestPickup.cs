@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -17,6 +18,12 @@ public class ChestPickup : MonoBehaviour
     private GameObject promptGO;
     private TextMesh promptTM;
     private bool opened = false;
+
+    // Event invoked when chest is opened (each time Open action occurs)
+    public event Action<ChestPickup> OnOpened;
+
+    // Public accessor for opened state (read-only)
+    public bool IsOpened => opened;
 
     private void Awake()
     {
@@ -62,6 +69,7 @@ public class ChestPickup : MonoBehaviour
                 // ´ò¿ª
                 opened = true;
                 ShowPopup(rewardText, Color.yellow);
+                OnOpened?.Invoke(this);
                 if (!reusable)
                 {
                     promptGO.SetActive(false);
@@ -77,6 +85,7 @@ public class ChestPickup : MonoBehaviour
             if (inRange && Input.GetKeyDown(interactKey))
             {
                 ShowPopup(rewardText, Color.yellow);
+                OnOpened?.Invoke(this);
             }
         }
     }

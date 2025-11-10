@@ -1,9 +1,11 @@
+using Assets.Scripts.ForBattle.Audio;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class TrainingManagerNPC : ScenarioNPC
 {
+    public SfxPlayer sfx;
     protected override void Awake()
     {
         npcName = string.IsNullOrEmpty(npcName) ? "训练场经理" : npcName;
@@ -40,8 +42,9 @@ public class TrainingManagerNPC : ScenarioNPC
         switch (choiceIndex)
         {
             case 0:
-                ShowWorldPopup("即将开始：普通战斗（狼兽）", Color.yellow);
+                ShowWorldPopup("即将开始：普通战斗（暴徒）", Color.yellow);
                 // 跳转到 SampleScene
+                sfx.StopAll();
                 UnityEngine.SceneManagement.SceneManager.LoadScene("SampleScene");
                 Debug.Log("加载场景 SampleScene 以进行普通战斗");
                 break;

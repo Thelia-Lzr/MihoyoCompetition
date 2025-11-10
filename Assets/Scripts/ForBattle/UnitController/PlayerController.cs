@@ -1,17 +1,19 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Assets.Scripts.ForBattle.UI;
 using Assets.Scripts.ForBattle.Indicators;
 using Assets.Scripts.ForBattle;
 using Assets.Scripts.ForBattle.Audio;
+using Assets.Scripts.ForBattle.Barriers; // for barrier BP reduction
 
-/// <summary>
-/// 玩家控制器基类：提供战斗UI、移动、目标选择与范围指示器功能。
-/// 子类可继承此类实现特定角色的技能。
-/// </summary>
 public class PlayerController : BattleUnitController
 {
+    [Header("Battle Presence")]
+    [Tooltip("处于战斗中。如果为 false，则该角色在备战区（隐藏但可调用，且不参与被选中/AI 目标）。全局应当仅有一个处于备战区的角色。")]
+    public bool isOnBattle = true;
+
     [Header("References")]
     public BattleCanvasController battleUI;
     public BattleIndicatorManager indicatorManager;
@@ -40,7 +42,7 @@ public class PlayerController : BattleUnitController
     public bool normalizeAnimatorSpeed = true;
     [Tooltip("Multiplier applied to the value sent to Animator.")]
     public float animatorSpeedScale = 1f;
-    private Animator cachedAnimator;
+    protected Animator cachedAnimator;
     [Tooltip("Optional Animator float parameter for turning (Unity-Chan uses 'Direction').")]
     public string animatorDirectionParam = "Direction";
     [Tooltip("Optional Animator bool parameter for grounded state.")]
@@ -128,16 +130,144 @@ public class PlayerController : BattleUnitController
             cachedAnimator = root.GetComponentInChildren<Animator>();
         }
         MapAnimatorParameters();
+        // 应用可见性
+        ApplyBattlePresence(isOnBattle);
     }
 
-    public override void OnBattleEnd()
+    private void ApplyBattlePresence(bool onBattle)
     {
-        if (battleUI != null)
-            battleUI.HideUI();
-        if (indicatorManager != null)
-            indicatorManager.ClearAll();
-        // stop footstep loop when battle ends
-        if (sfxPlayer != null) sfxPlayer.StopLoop(stepLoopKey);
+        isOnBattle = onBattle;
+        // 隐藏/显示渲染器与碰撞体，但不禁用 GameObject 以保证可调用
+        var renderers = GetComponentsInChildren<Renderer>(true);
+        foreach (var r in renderers) r.enabled = onBattle;
+        var colliders = GetComponentsInChildren<Collider>(true);
+        foreach (var c in colliders) c.enabled = onBattle;
+
+        // Sync HP between persistent (hp) and battle (battleHp) representations.
+        // When entering battle, ensure battleHp reflects persistent hp.
+        // When leaving battle, write back battleHp to persistent hp so bench retains updated HP.
+        if (unit != null)
+        {
+            if (onBattle)
+            {
+                // entering battle: set battleHp from persistent hp (clamped)
+                unit.battleHp = Mathf.Clamp(unit.hp, 0, Mathf.Max(1, unit.battleMaxHp));
+            }
+            else
+            {
+                // leaving battle: persist current battleHp back to hp
+                unit.hp = Mathf.Clamp(unit.battleHp, 0, Mathf.Max(1, unit.battleMaxHp));
+            }
+        }
+    }
+
+    private bool TryFindBench(out PlayerController bench)
+    {
+        bench = null;
+        var all = FindObjectsOfType<PlayerController>();
+        foreach (var pc in all)
+        {
+            if (pc == null || pc == this) continue;
+            if (!pc.isOnBattle)
+            {
+                bench = pc; return true;
+            }
+        }
+        return false;
+    }
+
+    private void ExecuteSwapBench()
+    {
+        if (!TryFindBench(out var bench))
+        {
+            Debug.LogWarning("[PlayerController] 未找到备战区角色，无法换人。");
+            return;
+        }
+        // Get turn manager
+        var tm = FindObjectOfType<BattleTurnManager>();
+
+        // Remember current unit's action points so we can transfer to bench (so bench will act later)
+        int preservedAP = 0;
+        if (unit != null) preservedAP = unit.battleActPoint;
+
+        // Remove current unit from turn order if present
+        if (tm != null && tm.turnOrder != null && unit != null)
+        {
+            tm.turnOrder.Remove(unit);
+        }
+
+        // Swap world positions
+        Vector3 curPos = transform.position;
+        Vector3 benchPos = bench.transform.position;
+
+        // bench 上场: move bench to current position and mark on-battle
+        bench.transform.position = curPos;
+        if (bench.unit != null) bench.unit.battlePos = new Vector2(curPos.x, curPos.z);
+        bench.ApplyBattlePresence(true);
+
+        // Defer camera focus until after both units have been moved and their battle presence applied below
+        BattleCameraController camCtrl = cameraController ?? FindObjectOfType<BattleCameraController>();
+        if (camCtrl != null)
+        {
+            Transform focus = null;
+            if (bench.unit != null && bench.unit.cameraRoot != null) focus = bench.unit.cameraRoot;
+            else focus = bench.transform;
+            // Force focus on the bench (new active) unit
+            camCtrl.ForceFocusTarget(focus, true);
+        }
+
+        // 当前下场: move current to bench position and mark off-battle
+        transform.position = benchPos;
+        if (unit != null) unit.battlePos = new Vector2(benchPos.x, benchPos.z);
+        ApplyBattlePresence(false);
+
+        // Ensure camera focuses the new active unit (bench) after positions have been updated to avoid jitter.
+        camCtrl = cameraController ?? FindObjectOfType<BattleCameraController>();
+        if (camCtrl != null)
+        {
+            Transform focus = null;
+            if (bench.unit != null && bench.unit.cameraRoot != null) focus = bench.unit.cameraRoot;
+            else focus = bench.transform;
+            // Force focus on the bench (new active) unit
+            camCtrl.ForceFocusTarget(focus, true);
+        }
+
+        // Add the bench unit to the turn order using preserved AP
+        if (tm != null && tm.turnOrder != null && bench.unit != null)
+        {
+            // Ensure bench is not already present (avoid duplicates)
+            if (tm.turnOrder.GetAll().Contains(bench.unit))
+            {
+                tm.turnOrder.Remove(bench.unit);
+            }
+
+            // Transfer AP so bench will appear at the end of the turn queue. Compute current minimum AP and set bench to one less.
+            var allUnits = tm.turnOrder.GetAll();
+            int minAP = 0;
+            if (allUnits != null && allUnits.Count > 0)
+            {
+                minAP = allUnits.Min(u => u != null ? u.battleActPoint : 0);
+            }
+            bench.unit.battleActPoint = minAP - 1;
+
+            // Ensure the bench BattleUnit is initialized (bind controller etc.) in case it was not on-battle at start
+            var benchBattleUnit = bench.GetComponent<BattleUnit>();
+            if (benchBattleUnit != null)
+            {
+                // AwakeBattleUnit is idempotent for our usage: it will bind controller if needed and set stats
+                benchBattleUnit.AwakeBattleUnit();
+                // Ensure the PlayerController (bench) performs its battle-start initialization
+                // so cached references (animator, UI refs) are set and the controller will function when its turn comes.
+                bench.OnBattleStart();
+            }
+
+            tm.AddUnitToTurnOrder(bench.unit);
+            // Keep queue consistent
+            tm.turnOrder.Sort();
+        }
+
+        // play sound
+        if (sfxPlayer != null) sfxPlayer.Play("swap");
     }
 
     public override IEnumerator ExecuteTurn(BattleTurnManager turnManager)
@@ -183,10 +313,10 @@ public class PlayerController : BattleUnitController
             if (battleUI != null)
             {
                 battleUI.ShowUI(unit, (action) =>
-   {
-       selectedAction = action;
-       actionConfirmed = true;
-   });
+                {
+                    selectedAction = action;
+                    // Do not auto-confirm Escape or Item here; require left-click confirmation for both
+                });
             }
             else
             {
@@ -201,7 +331,6 @@ public class PlayerController : BattleUnitController
             // 等待玩家确认或允许移动
             while (!actionConfirmed)
             {
-
                 if (prevChoice != battleUI.Choice)
                 {
                     indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.TargetMarker);
@@ -216,6 +345,8 @@ public class PlayerController : BattleUnitController
                 // allow movement and QE selection
                 HandleMovement();
                 HandleSelectionSwitch(ref actionConfirmed);
+
+                // Do not auto-confirm Escape/Item on menu change; require explicit left-click confirmation
 
                 // Preview logic for Attack: target cycling like single-target skill
                 if (battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Attack)
@@ -259,6 +390,7 @@ public class PlayerController : BattleUnitController
                     if (Input.GetKeyDown(KeyCode.Tab) && attackCandidateTargets.Count > 0)
                     {
                         attackTargetCycleIndex = (attackTargetCycleIndex + 1) % attackCandidateTargets.Count;
+                        if (sfxPlayer != null) sfxPlayer.Play("ChangeChoice");
                     }
                     if (attackTargetCycleIndex >= attackCandidateTargets.Count) attackTargetCycleIndex = 0;
 
@@ -343,24 +475,51 @@ public class PlayerController : BattleUnitController
                     preselectedTarget = null;
                 }
 
-
-                // If hovering Skill and we have a skill list, populate and show skills
-                if (slc != null && battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Skill)
+                // If hovering Skill and we are in Skill mode, handle preview and candidates even if skill list is missing
+                if (battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Skill)
                 {
+                    // Populate and show skill list if available
                     var display = GetSkillDisplayStrings();
                     string sig = null;
                     if (display != null) sig = string.Join("|", display);
-                    if (sig != skillListSignature && display != null)
+                    if (slc != null)
                     {
-                        slc.SetSkills(display);
-                        skillListSignature = sig;
-                        prevShownSkillIndex = -1;
-                        // 切换技能列表时重置目标循环
-                        skillTargetCycleIndex = 0;
+                        if (sig != skillListSignature && display != null)
+                        {
+                            slc.SetSkills(display);
+                            skillListSignature = sig;
+                            prevShownSkillIndex = -1;
+                            // 切换技能列表时重置目标循环
+                            skillTargetCycleIndex = 0;
+                        }
+                        slc.Show();
                     }
-                    slc.Show();
 
-                    int currIdx = slc.GetSelectedIndex();
+                    // Determine current skill index with robust fallback
+                    int currIdx = -1;
+                    if (slc != null) currIdx = slc.GetSelectedIndex();
+                    if (currIdx < 0)
+                    {
+                        // Fallback to previously shown index if valid
+                        if (prevShownSkillIndex >= 0 && display != null && prevShownSkillIndex < display.Count)
+                        {
+                            currIdx = prevShownSkillIndex;
+                        }
+                        else
+                        {
+                            // Try first single-target skill; otherwise 0
+                            currIdx = 0;
+                            var names = GetSkillNames();
+                            if (names != null)
+                            {
+                                for (int i = 0; i < names.Count; i++)
+                                {
+                                    if (IsSkillSingleTarget(i)) { currIdx = i; break; }
+                                }
+                            }
+                        }
+                    }
+
                     if (currIdx != prevShownSkillIndex)
                     {
                         indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
@@ -368,9 +527,10 @@ public class PlayerController : BattleUnitController
                         // 技能改变时重置目标循环
                         skillTargetCycleIndex = 0;
                     }
+
                     ShowSkillPreview(currIdx);
 
-                    // 单体技能目标循环逻辑
+                    // 单体技能目标循环逻辑（与 SkillListController 脱钩）
                     if (IsSkillSingleTarget(currIdx))
                     {
                         // 构建候选列表：在施法范围内且有效
@@ -390,6 +550,7 @@ public class PlayerController : BattleUnitController
                             if (Input.GetKeyDown(KeyCode.Tab))
                             {
                                 skillTargetCycleIndex = (skillTargetCycleIndex + 1) % skillCandidateTargets.Count;
+                                if (sfxPlayer != null) sfxPlayer.Play("ChangeChoice");
                             }
                             // 安全索引
                             if (skillTargetCycleIndex >= skillCandidateTargets.Count) skillTargetCycleIndex = 0;
@@ -417,9 +578,12 @@ public class PlayerController : BattleUnitController
 
                     prevShownSkillIndex = currIdx;
                 }
-                else if (slc != null)
+                else
                 {
-                    slc.Hide();
+                    if (slc != null)
+                    {
+                        slc.Hide();
+                    }
                     skillListSignature = null;
                     prevShownSkillIndex = -1;
                     //退出技能选择时清理所有技能相关指示器（保留普攻的目标标记）
@@ -428,14 +592,36 @@ public class PlayerController : BattleUnitController
                         indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillPreview);
                         indicatorManager.ClearIndicatorsByTag(BattleIndicatorManager.Tags.SkillRange);
                         // 不要在这里清理 TargetMarker，普攻模式需要它
-                        skillRangeIndicator = null;
+                        // If a controller created a persistent skillRangeIndicator, destroy it to avoid leaving orphans
+                        if (skillRangeIndicator != null)
+                        {
+                            indicatorManager.DestroyIndicator(skillRangeIndicator);
+                            skillRangeIndicator = null;
+                        }
                     }
                     preselectedTarget = null;
                 }
 
                 // 当不在攻击模式也不在单体技能模式时始终清理目标标记
                 bool inAttack = battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Attack;
-                bool inSingleTargetSkill = battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Skill && IsSkillSingleTarget((slc != null) ? slc.GetSelectedIndex() : -1);
+                // 使用最近计算的 prevShownSkillIndex 作为判定依据，避免 GetSelectedIndex() 返回 -1 导致的闪烁
+                bool inSingleTargetSkill = false;
+                if (battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Skill)
+                {
+                    int idx = prevShownSkillIndex;
+                    if (idx < 0)
+                    {
+                        var names = GetSkillNames();
+                        if (names != null)
+                        {
+                            for (int i = 0; i < names.Count; i++)
+                            {
+                                if (IsSkillSingleTarget(i)) { idx = i; break; }
+                            }
+                        }
+                    }
+                    inSingleTargetSkill = IsSkillSingleTarget(idx);
+                }
                 if (!inAttack && !inSingleTargetSkill)
                 {
                     if (indicatorManager != null)
@@ -453,11 +639,10 @@ public class PlayerController : BattleUnitController
                         BattleUnit toAttack = preselectedTarget != null ? preselectedTarget : currentAttackTarget;
                         if (toAttack != null)
                         {
-                            var partnerSnapshot = currentChainPartner; // 捕获当下连携伙伴
-                            preselectedTarget = toAttack; // ensure ExecuteAttack uses same
+                            var partnerSnapshot = currentChainPartner;
+                            preselectedTarget = toAttack;
                             selectedAction = BattleCanvasController.BattleActionType.Attack;
                             yield return ExecuteAttack();
-                            // 连携伙伴额外普攻（不影响其行动点）
                             if (partnerSnapshot != null && partnerSnapshot.battleHp > 0)
                             {
                                 yield return StartCoroutine(PerformChainAttack(partnerSnapshot, toAttack));
@@ -471,9 +656,19 @@ public class PlayerController : BattleUnitController
                     }
                     else if (battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Skill)
                     {
-                        // 尝试快速释放：仅在成功时才确认并关闭UI；失败则停留在选择界面以便重选
-                        int idx = (slc != null) ? slc.GetSelectedIndex() : -1;
-                        // 在尝试前重置重选标志，由技能在失败时设置
+                        int idx = (slc != null) ? slc.GetSelectedIndex() : prevShownSkillIndex;
+                        if (idx < 0)
+                        {
+                            var names = GetSkillNames();
+                            idx = 0;
+                            if (names != null)
+                            {
+                                for (int i = 0; i < names.Count; i++)
+                                {
+                                    if (IsSkillSingleTarget(i)) { idx = i; break; }
+                                }
+                            }
+                        }
                         skillReselectRequested = false;
                         yield return TryQuickCastSkill(idx);
                         if (skillReselectRequested == false)
@@ -481,10 +676,31 @@ public class PlayerController : BattleUnitController
                             actionConfirmed = true;
                         }
                     }
+                    else if (battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Item)
+                    {
+                        // Confirm swap selection on left click; actual swap will be executed after selection loop
+                        selectedAction = BattleCanvasController.BattleActionType.Item;
+                        actionConfirmed = true;
+                    }
                 }
                 prevChoice = battleUI.Choice;
                 yield return null;
             }
+
+            // 处理立即动作类型（Item/Swap 在此执行，Escape 在此确认并跳过回合）
+            if (selectedAction == BattleCanvasController.BattleActionType.Item)
+            {
+                // 换人：执行交换并结束回合
+                ExecuteSwapBench();
+            }
+            else if (selectedAction == BattleCanvasController.BattleActionType.Escape)
+            {
+                // 跳过回合：无需额外操作 (已由确认触发)
+            }
+             else
+             {
+                 // 其余动作在原有逻辑中通过点击执行，这里不处理（因 actionConfirmed 不会为 true）
+             }
 
             // hide skill list and any preview markers when leaving selection phase
             if (slc != null) slc.Hide();
@@ -866,6 +1082,7 @@ public class PlayerController : BattleUnitController
                 if (validTargets.Count > 0)
                 {
                     currentIndex = (currentIndex + 1) % validTargets.Count;
+                    if (sfxPlayer != null) sfxPlayer.Play("ChangeChoice");
                 }
             }
 
@@ -1174,7 +1391,7 @@ public class PlayerController : BattleUnitController
     }
 
     // Map animator parameter names to what's actually on the controller (Unity-Chan / Standard Assets / custom)
-    private void MapAnimatorParameters()
+    protected virtual void MapAnimatorParameters()
     {
         animHasSpeedParam = animHasDirectionParam = animHasGroundedParam = false;
         animHasForwardParam = animHasTurnParam = false;
@@ -1351,5 +1568,23 @@ public class PlayerController : BattleUnitController
         {
             cachedAnimator.SetFloat(animatorSpeedParam, 0f);
         }
+    }
+
+    // Helper: compute effective BP cost after barrier reductions (e.g., Lumina blessing)
+    protected int GetEffectiveBpCost(int baseCost)
+    {
+        if (unit == null) return baseCost;
+        // Sum BP reduction directly from barriers affecting this unit
+        int reduction = BarrierBase.GetTotalBpCostDeltaForUnit(unit);
+        int effective = Mathf.Max(0, baseCost - reduction);
+        return effective;
+    }
+
+    // Helper: format BP cost string with reduction info if applicable
+    protected string FormatBpCost(int baseCost)
+    {
+        int eff = GetEffectiveBpCost(baseCost);
+        if (eff == baseCost) return $"BP {baseCost}"; // no change
+        return $"BP {baseCost}->{eff}"; // show original and reduced
     }
 }

@@ -1585,6 +1585,7 @@ GameObject:
   - component: {fileID: 1023248934}
   - component: {fileID: 1023248935}
   - component: {fileID: 1023248936}
+  - component: {fileID: 1023248937}
   m_Layer: 0
   m_Name: Managers
   m_TagString: Untagged
@@ -1622,6 +1623,20 @@ MonoBehaviour:
   stringVars: []
   intVars: []
   boolVars: []
+  gameObjectRefs:
+  - key: Villiager
+    value: {fileID: 1343914395}
+  - key: Lily
+    value: {fileID: 166947895}
+  - key: Weapon
+    value: {fileID: 537552150}
+  - key: Guard
+    value: {fileID: 678496355}
+  - key: Fayt
+    value: {fileID: 1440180269}
+  - key: Chest
+    value: {fileID: 848465726}
+  fateVisionDuration: 5
 --- !u!114 &1023248936
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1638,11 +1653,35 @@ MonoBehaviour:
   - key: ChangeChoice
     clip: {fileID: 8300000, guid: dea511c9ae8dd3446920b5209bc3b12c, type: 3}
     volume: 1
-  - key: Steps
+  - key: steps
     clip: {fileID: 8300000, guid: b071231dee11aae4e8a69ed4bbe2c6f8, type: 3}
     volume: 1
+  - key: Villiage
+    clip: {fileID: 8300000, guid: f220f6cf2eb62e549b16f34c2ef7534b, type: 3}
+    volume: 0.16
   initialPoolSize: 4
   minLoopPlayTime: 0.5
+--- !u!114 &1023248937
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1023248933}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8236606dd86cc342af940881f76358c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  colors:
+  - name: Blue
+    color: {r: 0, g: 0.1496911, b: 1, a: 0.5803922}
+  - name: Green
+    color: {r: 0, g: 1, b: 0.104809284, a: 0.5882353}
+  - name: Yellow
+    color: {r: 1, g: 0.8676308, b: 0, a: 0.68235296}
+  lineWidth: 0.05
+  lineMaterial: {fileID: 0}
 --- !u!1 &1198746742
 GameObject:
   m_ObjectHideFlags: 0
@@ -2720,7 +2759,7 @@ MonoBehaviour:
   cameraTransform: {fileID: 1359608952}
   enableCameraControl: 1
   holdRightToRotate: 0
-  mouseSensitivity: 180
+  mouseSensitivity: 90
   minPitch: -35
   maxPitch: 70
   cameraDistance: 5
@@ -2805,6 +2844,7 @@ MonoBehaviour:
   animMovingBoolParam: IsMoving
   animSpeedParam: Speed
   animIdleParam: Idle
+  sfx: {fileID: 1023248936}
 --- !u!1 &1646355028
 GameObject:
   m_ObjectHideFlags: 0

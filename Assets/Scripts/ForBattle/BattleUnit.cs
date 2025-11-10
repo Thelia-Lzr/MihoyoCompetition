@@ -104,7 +104,11 @@ public class BattleUnit : MonoBehaviour
     public int luminaDownMagicDef;
     public int luminaDownMagicAtk;
 
-
+    [Header("Blake Buffs (Durations)")]
+    [Tooltip("防守直觉剩余回合")] public int blakeDefenseAura; // +DEF -ATK
+    [Tooltip("狂战士剩余回合")] public int blakeBerserkAura; // +ATK -DEF
+    [Tooltip("被嘲讽(强制攻击来源) 剩余回合")] public int blakeTaunt; // applied on enemies
+    [Tooltip("被上挑/击晕 剩余回合")] public int blakeStun; // simple stun counter
 
     [Tooltip("Battle Position")]
     public Vector2 battlePos;
@@ -153,6 +157,13 @@ public class BattleUnit : MonoBehaviour
 
     private BarrierContribution _lastBarrierContribution; // 上一帧应用的结界加成（用于差分撤销）
 
+    [Header("Elemental Statuses")]
+    // 灼热（Burn）: 持续伤害
+    public int burnTurns;
+    // 眩目/致盲：降低命中/回避（临时减少回避）
+    public int blindTurns;
+    public int blindEvasionDelta;
+
     public void AwakeBattleUnit()
     {
         battleMaxHp = maxhp;
@@ -165,6 +176,11 @@ public class BattleUnit : MonoBehaviour
         battleCri = cri;
         battleEvasion = evasion;
         battleActPoint =0;
+
+        // ensure fields initialized
+        burnTurns = 0;
+        blindTurns = 0;
+        blindEvasionDelta = 0;
 
         // Try to get a controller component on the same GameObject and bind
         if (controller == null)
@@ -290,6 +306,22 @@ public class BattleUnit : MonoBehaviour
             luminaDownMagicAtk -=1;
             battleMagicAtk -= Mathf.RoundToInt(magicAtk * .4f);
         }
+
+        // Blake auras (apply AFTER base stats so stacking behaves predictably)
+        if (blakeDefenseAura > 0)
+        {
+            blakeDefenseAura -= 1;
+            battleDef += Mathf.RoundToInt(def * 0.30f); // +30% DEF
+            battleAtk -= Mathf.RoundToInt(atk * 0.20f); // -20% ATK
+        }
+        if (blakeBerserkAura > 0)
+        {
+            blakeBerserkAura -= 1;
+            battleAtk += Mathf.RoundToInt(atk * 0.40f); // +40% ATK
+            battleDef -= Mathf.RoundToInt(def * 0.20f); // -20% DEF
+        }
+        if (blakeTaunt > 0) blakeTaunt -= 1;
+        if (blakeStun > 0) blakeStun -= 1;
     }
 
     public void EndBattle()
