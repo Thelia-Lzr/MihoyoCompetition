@@ -25984,7 +25984,7 @@ MonoBehaviour:
   magicAtk: 0
   def: 40
   magicDef: 40
-  spd: 210
+  spd: 150
   evasion: 0
   cri: 0
   battleMaxHp: 300

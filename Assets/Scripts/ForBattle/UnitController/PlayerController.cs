@@ -682,6 +682,12 @@ public class PlayerController : BattleUnitController
                         selectedAction = BattleCanvasController.BattleActionType.Item;
                         actionConfirmed = true;
                     }
+                    else if (battleUI != null && battleUI.Choice == BattleCanvasController.BattleActionType.Escape)
+                    {
+                        // Confirm escape on left click; actual escape handling will be done after selection loop
+                        selectedAction = BattleCanvasController.BattleActionType.Escape;
+                        actionConfirmed = true;
+                    }
                 }
                 prevChoice = battleUI.Choice;
                 yield return null;

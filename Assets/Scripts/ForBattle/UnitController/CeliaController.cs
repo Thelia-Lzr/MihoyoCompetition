@@ -327,12 +327,14 @@ public class CeliaController : PlayerController
                     }
                     else if (level == 2)
                     {
-                        float radius = fireRadiusLv2;
+                        // Volcano (Lv2) now targets a single selected unit, then applies AoE around that target
+                        float aoeRadius = fireRadiusLv2;
                         int dmg = Mathf.Max(1, Mathf.RoundToInt(unit.battleMagicAtk * 1.2f));
+                        Vector3 center = (targetRel != null) ? targetRel.transform.position : transform.position;
                         foreach (var u in FindObjectsOfType<BattleUnit>())
                         {
                             if (!IsValidTarget(u)) continue;
-                            if (Vector3.Distance(transform.position, u.transform.position) <= radius)
+                            if (Vector3.Distance(center, u.transform.position) <= aoeRadius)
                                 skillSystem?.CauseDamage(u, unit, dmg, DamageType.Magic);
                         }
                     }
@@ -590,7 +592,7 @@ public class CeliaController : PlayerController
 
             // Determine whether this is a single-target style preview (show range circle + target marker)
             bool singleTargetPreview = false;
-            if (index == 0 && level == 1) singleTargetPreview = true; // Fire Lv1
+            if (index == 0 && (level == 1 || level == 2)) singleTargetPreview = true; // Fire Lv1 and Fire Lv2 (volcano) are single-target styles
             // Shock: Lv1 and Lv3 are single-target styles (Lv2 is a line)
             if (index == 1 && (level == 1 || level == 3)) singleTargetPreview = true; // Shock Lv1/3
             if (index == 2 && (level == 1 || level == 2)) singleTargetPreview = true; // Ice Lv1/2
@@ -599,22 +601,43 @@ public class CeliaController : PlayerController
             if (singleTargetPreview)
             {
                 // show cast range circle (follows caster) - fixed size for single-target skills
-                radius = 5f;
-                Vector3 center = GetGroundPosition(transform.position);
-                if (skillRangeIndicator == null)
+                // For Fire Lv2 (volcano) we want a target-centered AoE preview around the selected target.
+                if (index == 0 && level == 2)
                 {
-                    // Use SkillPreview tag for single-target persistent indicator so it's not cleared by other SkillRange usage
-                    skillRangeIndicator = indicatorManager.CreateCircleIndicator(center, radius, true, true, BattleIndicatorManager.Tags.SkillPreview, false);
+                    radius = fireRadiusLv2;
+                    Vector3 center = (preselectedTarget != null) ? GetGroundPosition(preselectedTarget.transform.position) : GetGroundPosition(transform.position);
+                    if (skillRangeIndicator == null)
+                    {
+                        // Use SkillPreview tag so it's managed like other previews and can be retagged to Chant
+                        skillRangeIndicator = indicatorManager.CreateCircleIndicator(center, radius, true, false, BattleIndicatorManager.Tags.SkillPreview, true, "Fire");
+                    }
+                    else
+                    {
+                        indicatorManager.UpdateCircleIndicatorKeepColor(skillRangeIndicator, center, radius);
+                    }
+                    // store preview params so fallback/chant creation can reuse them
+                    currentPreviewShape = PreviewShape.Circle;
+                    previewRadius = radius;
+                    previewCenter = center;
                 }
                 else
                 {
-                    // update position/size without changing color
-                    indicatorManager.UpdateCircleIndicatorKeepColor(skillRangeIndicator, center, radius);
+                    radius = 5f;
+                    Vector3 center = GetGroundPosition(transform.position);
+                    if (skillRangeIndicator == null)
+                    {
+                        // Use SkillPreview tag for single-target persistent indicator so it's not cleared by other SkillRange usage
+                        skillRangeIndicator = indicatorManager.CreateCircleIndicator(center, radius, true, true, BattleIndicatorManager.Tags.SkillPreview, false);
+                    }
+                    else
+                    {
+                        // update position/size without changing color
+                        indicatorManager.UpdateCircleIndicatorKeepColor(skillRangeIndicator, center, radius);
+                    }
+                    currentPreviewShape = PreviewShape.Circle;
+                    previewRadius = radius;
+                    previewCenter = center;
                 }
-                // store preview params
-                currentPreviewShape = PreviewShape.Circle;
-                previewRadius = radius;
-                previewCenter = center;
 
                 return;
             }
@@ -706,13 +729,13 @@ public class CeliaController : PlayerController
                     {
                         radius = windRadiusLv2;
                         var center = GetGroundPosition(transform.position);
-                        skillSectorIndicator = indicatorManager.CreateCircleIndicator(center, radius, true, false, BattleIndicatorManager.Tags.SkillPreview, true, "Ice");
+                        indicatorManager.CreateCircleIndicator(center, radius, true, false, BattleIndicatorManager.Tags.SkillPreview, true, "Ice");
                     }
                     else
                     {
                         radius = windRadiusLv3;
                         var center = GetGroundPosition(transform.position);
-                        skillSectorIndicator = indicatorManager.CreateCircleIndicator(center, radius, true, false, BattleIndicatorManager.Tags.SkillPreview, true, "Ice");
+                        indicatorManager.CreateCircleIndicator(center, radius, true, false, BattleIndicatorManager.Tags.SkillPreview, true, "Ice");
                     }
                     break;
             }
@@ -880,6 +903,23 @@ public class CeliaController : PlayerController
                 }
             }
         }
+
+        // If currently chanting and our chantIndicator is following a target, keep it aligned to target ground
+        if (chantIndicator != null && chantingSkillIndex >= 0 && chantingTarget != null)
+        {
+            // ensure indicator follows the target's ground position
+            var pos = GetGroundPosition(chantingTarget.transform.position);
+            // If indicator is not parented, update its position explicitly via indicator manager if available
+            if (chantIndicator.transform.parent == null || chantIndicator.transform.parent != chantingTarget.transform)
+            {
+                indicatorManager?.UpdateCircleIndicatorKeepColor(chantIndicator, pos, previewRadius);
+            }
+            else
+            {
+                // if parented, ensure local position is zeroed to stick to root
+                chantIndicator.transform.position = pos;
+            }
+        }
     }
 
     // Ensure single-target style skills use a fixed cast range (5f)
@@ -936,6 +976,12 @@ public class CeliaController : PlayerController
                 lastSkillPreviewObject = skillRangeIndicator;
                 indicatorManager.ChangeIndicatorTag(lastSkillPreviewObject, BattleIndicatorManager.Tags.Chant);
                 chantIndicator = lastSkillPreviewObject;
+                // If this chant is for a target-centered skill and we have a preselected target, parent/move indicator to follow target
+                if (preselectedTarget != null)
+                {
+                    // try to attach indicator to the target transform so it follows automatically
+                    chantIndicator.transform.SetParent(preselectedTarget.transform, true);
+                }
                 Debug.Log("Celia StartChanting: reused skillRangeIndicator as chantIndicator");
             }
             else if (skillSectorIndicator != null)
@@ -943,11 +989,19 @@ public class CeliaController : PlayerController
                 lastSkillPreviewObject = skillSectorIndicator;
                 indicatorManager.ChangeIndicatorTag(lastSkillPreviewObject, BattleIndicatorManager.Tags.Chant);
                 chantIndicator = lastSkillPreviewObject;
+                if (preselectedTarget != null)
+                {
+                    chantIndicator.transform.SetParent(preselectedTarget.transform, true);
+                }
             }
             else
             {
                 // no existing preview object to retag: create a fallback chant indicator using preview params
                 chantIndicator = CreateFallbackChantIndicator();
+                if (preselectedTarget != null && chantIndicator != null)
+                {
+                    chantIndicator.transform.SetParent(preselectedTarget.transform, true);
+                }
             }
         }
     }
@@ -980,6 +1034,11 @@ public class CeliaController : PlayerController
             {
                 // restore tag to SkillPreview so base preview logic can manage it
                 indicatorManager.ChangeIndicatorTag(lastSkillPreviewObject, BattleIndicatorManager.Tags.SkillPreview);
+                // When restoring, unparent to return to normal preview positioning
+                if (lastSkillPreviewObject.transform.parent != null)
+                {
+                    lastSkillPreviewObject.transform.SetParent(null, true);
+                }
                 // keep the preview object reference assigned so ShowSkillPreview can continue updating it
             }
             else

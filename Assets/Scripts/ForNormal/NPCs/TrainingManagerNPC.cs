@@ -28,7 +28,7 @@ public class TrainingManagerNPC : ScenarioNPC
             choices = new List<string>
             {
                 "A：挑战“暴徒”（触发“普通战斗”）",
-                "B：挑战“凶恶巨兽”（触发“Boss战斗”）",
+                "B：挑战“法师训练家”（触发“Boss战斗”）",
                 "C：还是算了（结束事件）"
             };
             return true;
@@ -49,7 +49,9 @@ public class TrainingManagerNPC : ScenarioNPC
                 Debug.Log("加载场景 SampleScene 以进行普通战斗");
                 break;
             case 1:
-                ShowWorldPopup("即将开始：Boss战斗（凶恶巨兽）", Color.yellow);
+                ShowWorldPopup("即将开始：Boss战斗（法师训练家）", Color.yellow);
+                sfx.StopAll();
+                UnityEngine.SceneManagement.SceneManager.LoadScene("BossScene");
                 break;
             default:
                 ShowWorldPopup("已取消训练。", Color.gray);

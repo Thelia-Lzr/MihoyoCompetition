@@ -46,6 +46,57 @@ public abstract class BattleUnitController : MonoBehaviour
         unit = battleUnit;
     }
 
+    /// <summary>
+    /// Ensure this controller is bound to a BattleUnit. Attempts to find a BattleUnit on the same GameObject,
+    /// in parent or children and binds if found. Also sets the BattleUnit.controller reference.
+    /// </summary>
+    public void EnsureBound()
+    {
+        if (unit != null) return;
+        // Try same GameObject
+        var bu = GetComponent<BattleUnit>();
+        if (bu == null) bu = GetComponentInParent<BattleUnit>();
+        if (bu == null) bu = GetComponentInChildren<BattleUnit>();
+        if (bu != null)
+        {
+            Bind(bu);
+            bu.controller = this;
+        }
+    }
+
+    /// <summary>
+    /// Auto-wire all BattleUnitController and BattleUnit instances in the current scene.
+    /// For each controller: attempt to bind to a BattleUnit on same object/parent/children.
+    /// For each BattleUnit: if it lacks a controller, try to find one on same object/children/parent.
+    /// </summary>
+    public static void AutoWireAll()
+    {
+        // First ensure controllers try to bind themselves
+        var controllers = GameObject.FindObjectsOfType<BattleUnitController>();
+        foreach (var c in controllers)
+        {
+            if (c == null) continue;
+            c.EnsureBound();
+        }
+
+        // Then ensure BattleUnit.controller references are set
+        var units = GameObject.FindObjectsOfType<BattleUnit>();
+        foreach (var u in units)
+        {
+            if (u == null) continue;
+            if (u.controller != null) continue;
+            // try find controller on same GO
+            var ctrl = u.GetComponent<BattleUnitController>();
+            if (ctrl == null) ctrl = u.GetComponentInChildren<BattleUnitController>();
+            if (ctrl == null) ctrl = u.GetComponentInParent<BattleUnitController>();
+            if (ctrl != null)
+            {
+                ctrl.Bind(u);
+                u.controller = ctrl;
+            }
+        }
+    }
+
     // Called when the battle starts for initialization
     public virtual void OnBattleStart() { }
 
